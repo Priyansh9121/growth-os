@@ -328,6 +328,50 @@ describeIntegration('CRM data lifecycle (merge, erasure, idempotency)', () => {
       expect(deleted).toHaveLength(0);
     });
 
+    it('does NOT block deleting a user who authored an entry', async () => {
+      // REGRESSION. `activities.actor_user_id` is ON DELETE SET NULL, so
+      // deleting a user makes PostgreSQL issue an UPDATE on `activities` with
+      // no lifecycle flag — and the first version of the trigger refused it.
+      //
+      // The effect was that any user who had ever authored a timeline entry
+      // could not be deleted, which after a few minutes of use is every user.
+      // The E2E suite found it, because `db:seed` truncates by DELETE while the
+      // integration harness uses TRUNCATE CASCADE, which fires no triggers.
+      await harness.owner.insert(activities).values({
+        workspaceId: workspaceA,
+        type: 'note.added',
+        summary: 'Authored by the operator',
+        contactId: survivor,
+        actorUserId: operator,
+      });
+
+      await expect(
+        harness.owner.delete(users).where(eq(users.id, operator)),
+      ).resolves.toBeDefined();
+
+      const [row] = await harness.owner
+        .select({ actorUserId: activities.actorUserId, summary: activities.summary })
+        .from(activities)
+        .where(eq(activities.summary, 'Authored by the operator'));
+
+      // De-attributed, not deleted, and the wording is untouched.
+      expect(row?.actorUserId).toBeNull();
+      expect(row?.summary).toBe('Authored by the operator');
+    });
+
+    it('still refuses a cascade-shaped update that also changes something else', async () => {
+      // The carve-out is recognised by SHAPE, not by trust. Nulling the author
+      // AND rewriting the summary in one statement is not a cascade.
+      const message = await rejectionMessage(() =>
+        harness.owner
+          .update(activities)
+          .set({ actorUserId: null, summary: 'tampered' })
+          .where(eq(activities.workspaceId, workspaceA)),
+      );
+
+      expect(message).toMatch(/append-only/i);
+    });
+
     it('refuses an UPDATE even when the flag is set by hand outside the functions', async () => {
       // The flag alone is not enough: the column-restriction trigger still
       // applies, so hand-setting it cannot rewrite what a merge may not.
