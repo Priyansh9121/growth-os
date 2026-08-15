@@ -4,12 +4,12 @@
 capture, CRM, AI agents and revenue attribution into one measurable loop — so a
 business can see which acquisition work produced revenue, not just rankings.
 
-> **Status: Stage 2 of 23 — CRM foundation.** On top of the Stage 1 foundation
-> (auth, multi-tenancy, design system, flagship login), Growth OS now has a
-> **tenant-safe, provenance-aware CRM**: contacts, acquisitions, pipelines,
-> opportunities, tasks and an append-only activity timeline.
+> **Status: Stage 2.5 of 23 — CRM data lifecycle.** On top of the Stage 2 CRM,
+> Growth OS can now **correct and remove** the data it records: contact merge,
+> irreversible PII erasure that preserves the commercial record, one idempotent
+> ingestion boundary, CSV import, tags, custom fields and password reset.
 > **No SEO, voice, automation or revenue attribution exists yet.** Dashboard
-> metrics are now a labelled mix of live CRM counts and remaining fixtures.
+> metrics are a labelled mix of live CRM counts and remaining fixtures.
 > See [docs/product/product-roadmap.md](docs/product/product-roadmap.md).
 
 ---
@@ -54,21 +54,30 @@ apps/web (Next.js)          ⬜ apps/api  ⬜ apps/worker  ⬜ apps/voice
 
 ## What actually works today
 
-| Capability                                                         | State                                       |
-| ------------------------------------------------------------------ | ------------------------------------------- |
-| Email + password sign-in (Argon2id, opaque server-side sessions)   | ✅                                          |
-| Multi-tenancy: users → memberships → workspaces, plus agencies     | ✅                                          |
-| Agency transitive access to client workspaces                      | ✅                                          |
-| Three-layer tenant isolation, incl. PostgreSQL row-level security  | ✅                                          |
-| CSRF origin validation, login rate limiting, open-redirect defence | ✅                                          |
-| Append-only audit trail with centralised credential redaction      | ✅                                          |
-| Design system: OKLCH tokens, motion tiers, contrast enforced in CI | ✅                                          |
-| Flagship 3D login + continuous login → dashboard transition        | ✅                                          |
-| Reduced-motion / no-WebGL / mobile fallbacks                       | ✅                                          |
-| Dashboard shell, full navigation architecture, workspace switcher  | ✅                                          |
-| Ask Growth AI — typed tool boundary, **no model connected**        | 🔨                                          |
-| Dashboard metrics                                                  | 🔨 **fixtures, labelled as such in the UI** |
-| SEO, CRM, voice, automation, attribution                           | ⬜ Stages 2–15                              |
+| Capability                                                         | State                                                                                                               |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| Email + password sign-in (Argon2id, opaque server-side sessions)   | ✅                                                                                                                  |
+| Multi-tenancy: users → memberships → workspaces, plus agencies     | ✅                                                                                                                  |
+| Agency transitive access to client workspaces                      | ✅                                                                                                                  |
+| Three-layer tenant isolation, incl. PostgreSQL row-level security  | ✅                                                                                                                  |
+| CSRF origin validation, login rate limiting, open-redirect defence | ✅                                                                                                                  |
+| Append-only audit trail with centralised credential redaction      | ✅                                                                                                                  |
+| Design system: OKLCH tokens, motion tiers, contrast enforced in CI | ✅                                                                                                                  |
+| Flagship 3D login + continuous login → dashboard transition        | ✅                                                                                                                  |
+| Reduced-motion / no-WebGL / mobile fallbacks                       | ✅                                                                                                                  |
+| Dashboard shell, full navigation architecture, workspace switcher  | ✅                                                                                                                  |
+| CRM: contacts, acquisitions, pipelines, opportunities, tasks       | ✅                                                                                                                  |
+| Contact merge — previewed, forward-only, no unmerge                | ✅                                                                                                                  |
+| PII erasure — irreversible, keeps deals and channel attribution    | ✅                                                                                                                  |
+| Idempotent ingestion boundary; a retried webhook creates nothing   | ✅                                                                                                                  |
+| CSV import — validate first, chunked writes, honest partial result | ✅                                                                                                                  |
+| Tags, typed custom fields, companies                               | ✅                                                                                                                  |
+| Password reset — enumeration-safe, single-use, revokes sessions    | 🔨 **no email provider; link is not delivered**                                                                     |
+| Ask Growth AI — typed tool boundary, **no model connected**        | 🔨                                                                                                                  |
+| Dashboard metrics                                                  | 🔨 **fixtures, labelled as such in the UI**                                                                         |
+| Multi-factor authentication                                        | ⬜ Decided ([ADR-0024](docs/decisions/ADR-0024-multi-factor-authentication.md)), gated on the first external tenant |
+| Erasure replay after a backup restore                              | ⬜ Specified; no backup system exists yet                                                                           |
+| SEO, voice, automation, attribution                                | ⬜ Stages 3–15                                                                                                      |
 
 ## Repository structure
 
@@ -142,7 +151,7 @@ treated as non-negotiable and are tested as **negatives** — we assert that
 access is denied, because a passing happy path proves nothing about isolation.
 
 - **Tenant isolation at three independent layers**: application guards, scoped
-  transactions, and PostgreSQL row-level security — on **all ten** tenant
+  transactions, and PostgreSQL row-level security — on **all seventeen** tenant
   tables, enabled _and_ forced. A forgotten `WHERE workspace_id` returns zero
   rows rather than another tenant's data.
   [docs/security/tenant-isolation.md](docs/security/tenant-isolation.md)
@@ -166,13 +175,25 @@ access is denied, because a passing happy path proves nothing about isolation.
   autonomy check and schema validation. An agent's permissions are always a
   subset of the user's.
   [docs/architecture/ai-agent-architecture.md](docs/architecture/ai-agent-architecture.md)
+- **A person can be removed, and the business keeps its books.** Erasure
+  anonymises in place across every table that holds their details — including
+  timeline entries and tasks reachable only through a deal — while deal values,
+  stages and channel attribution survive. Asserted by **searching** for the
+  name afterwards, not by checking the columns the code happens to clear.
+  [docs/security/data-lifecycle.md](docs/security/data-lifecycle.md)
+- **The activity timeline stays append-only.** Merge and erasure are the only
+  paths that can touch it, through a gated escalation whose limits are
+  [written down honestly](docs/security/data-lifecycle.md#6-the-escalation-mechanism-and-its-honest-limits)
+  rather than overstated.
 
 Full threat model, including risks for features not yet built (crawler SSRF,
 prompt injection, webhook forgery):
 [docs/security/threat-model.md](docs/security/threat-model.md).
 
-**Never commit** `.env*` files, credentials, keys or database dumps.
-`npm run verify:gitignore` fails the build if any appear.
+**Never commit** `.env*` files, credentials, keys, database dumps or customer
+CSV exports. `npm run verify:gitignore` fails the build if any appear — and
+asserts both directions, so a rule guarding customer data cannot quietly start
+hiding a test fixture.
 
 ## Documentation
 
