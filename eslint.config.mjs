@@ -95,6 +95,7 @@ export default tseslint.config(
   //     contracts  → (nothing internal)
   //     database   → contracts
   //     auth       → contracts, database
+  //     crm        → contracts, database        (NEVER auth — would cycle)
   //     apps/*     → any package, never another app
   // ---------------------------------------------------------------------------
 
@@ -162,7 +163,14 @@ export default tseslint.config(
           ],
           patterns: [
             {
-              group: ['@growth-os/auth', '@growth-os/auth/*', '@growth-os/ui', '@growth-os/ui/*'],
+              group: [
+                '@growth-os/auth',
+                '@growth-os/auth/*',
+                '@growth-os/ui',
+                '@growth-os/ui/*',
+                '@growth-os/crm',
+                '@growth-os/crm/*',
+              ],
               message:
                 'packages/database may depend on @growth-os/contracts only. Dependencies point downward (ADR-0001).',
             },
@@ -190,14 +198,48 @@ export default tseslint.config(
           ],
           patterns: [
             {
-              group: ['@growth-os/ui', '@growth-os/ui/*'],
+              group: ['@growth-os/ui', '@growth-os/ui/*', '@growth-os/crm', '@growth-os/crm/*'],
               message:
-                'packages/auth must not depend on the design system. Authorization logic is presentation-agnostic (ADR-0001).',
+                'packages/auth must not depend on the design system or the CRM. Authorization is presentation- and domain-agnostic (ADR-0001).',
             },
             {
               group: ['next/*'],
               message:
                 'Domain packages must not depend on Next.js — it must stay hostable by Fastify.',
+            },
+            {
+              group: ['../../*', '**/apps/**'],
+              message: 'Imports must not escape the package directory.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // crm → contracts, database. NEVER auth: that would create a cycle and
+  // couple the CRM to how authentication happened, which the voice service
+  // (Stage 13) will not share.
+  {
+    files: ['packages/crm/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            { name: 'next', message: 'Domain packages must not depend on Next.js.' },
+            { name: 'react', message: 'Domain packages must not depend on React.' },
+          ],
+          patterns: [
+            {
+              group: ['@growth-os/auth', '@growth-os/auth/*', '@growth-os/ui', '@growth-os/ui/*'],
+              message:
+                'packages/crm may depend on @growth-os/contracts and @growth-os/database only. Importing auth would create a cycle (ADR-0011).',
+            },
+            {
+              group: ['next/*'],
+              message:
+                'Domain packages must not depend on Next.js — it must stay hostable by the worker and voice service.',
             },
             {
               group: ['../../*', '**/apps/**'],
@@ -237,6 +279,16 @@ export default tseslint.config(
       '@typescript-eslint/no-non-null-assertion': 'off',
       'no-console': 'off',
     },
+  },
+
+  // The seed script is the single sanctioned exception to `database -/-> crm`.
+  // It is development-only tooling, not library code, and it imports the CRM
+  // DYNAMICALLY so no static dependency edge is created — the packages remain
+  // independently loadable. Narrowed to this one file rather than the whole
+  // scripts directory.
+  {
+    files: ['packages/database/src/scripts/seed.ts', 'packages/database/src/scripts/seed-crm.ts'],
+    rules: { 'no-restricted-imports': 'off' },
   },
 
   // Scripts run in a terminal; printing IS their interface. Plain `.mjs` files

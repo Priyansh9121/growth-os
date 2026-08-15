@@ -107,6 +107,50 @@ jobs:
       - name: Component tests
         run: npm run test:web
 
+  e2e:
+    name: Browser end-to-end
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: growth_os_owner
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: growth_os_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U growth_os_owner"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        # Runs against a PRODUCTION build — the dev server has different CSP
+        # requirements, so testing it would prove nothing about what ships.
+        env:
+          E2E_DATABASE_URL: postgresql://growth_os_owner:ci_only_password@localhost:5432/growth_os_test
+        run: npm run e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
   build:
     name: Production build
     runs-on: ubuntu-latest

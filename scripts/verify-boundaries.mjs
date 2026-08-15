@@ -67,6 +67,39 @@ const PROBES = [
     source: "import { cookies } from 'next/headers';\nexport const probe = cookies;\n",
   },
   {
+    name: 'crm → auth (would cycle)',
+    file: 'packages/crm/src/__boundary_probe.ts',
+    source: "import { hashPassword } from '@growth-os/auth';\nexport const probe = hashPassword;\n",
+  },
+  {
+    name: 'crm → ui',
+    file: 'packages/crm/src/__boundary_probe.ts',
+    source: "import { cn } from '@growth-os/ui';\nexport const probe = cn;\n",
+  },
+  {
+    name: 'crm → next',
+    file: 'packages/crm/src/__boundary_probe.ts',
+    source: "import { cookies } from 'next/headers';\nexport const probe = cookies;\n",
+  },
+  {
+    name: 'database → crm (inverted dependency)',
+    file: 'packages/database/src/__boundary_probe.ts',
+    source:
+      "import { createContact } from '@growth-os/crm';\nexport const probe = createContact;\n",
+  },
+  {
+    name: 'auth → crm (inverted dependency)',
+    file: 'packages/auth/src/__boundary_probe.ts',
+    source:
+      "import { createContact } from '@growth-os/crm';\nexport const probe = createContact;\n",
+  },
+  {
+    name: 'ui → crm',
+    file: 'packages/ui/src/__boundary_probe.ts',
+    source:
+      "import { createContact } from '@growth-os/crm';\nexport const probe = createContact;\n",
+  },
+  {
     name: 'package escaping its directory with a relative path',
     file: 'packages/auth/src/__boundary_probe.ts',
     source: "import { cn } from '../../ui/src/lib/cn';\nexport const probe = cn;\n",
