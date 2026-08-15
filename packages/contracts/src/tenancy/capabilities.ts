@@ -98,6 +98,32 @@ export const CAPABILITIES = [
   'workspace:crm:contacts:read',
   'workspace:crm:contacts:write',
   'workspace:crm:contacts:archive',
+
+  /**
+   * Data lifecycle (Stage 2.5). Each is separate from `contacts:write` and
+   * from each other, because they are not degrees of the same act:
+   *
+   *  - `merge`  irreversibly folds two customers into one
+   *  - `erase`  irreversibly destroys identity
+   *  - `import` writes thousands of rows in one action
+   *
+   * Someone who can fix a typo should not thereby be able to do any of them.
+   */
+  'workspace:crm:contacts:merge',
+  'workspace:crm:contacts:erase',
+  'workspace:crm:contacts:import',
+
+  /** Applying an existing tag is daily work; defining the vocabulary is not. */
+  'workspace:crm:tags:apply',
+  'workspace:crm:tags:manage',
+
+  /**
+   * Custom field DEFINITIONS are schema for the workspace. Values are ordinary
+   * contact data and ride on `contacts:write`, so no separate write capability
+   * exists for them — one would only invite an inconsistent grant.
+   */
+  'workspace:crm:custom_fields:manage',
+
   'workspace:crm:companies:read',
   'workspace:crm:companies:write',
   'workspace:crm:opportunities:read',
@@ -147,6 +173,9 @@ const MEMBER_CAPABILITIES = [
   'workspace:crm:companies:write',
   'workspace:crm:opportunities:write',
   'workspace:crm:tasks:write',
+  // Applying an EXISTING tag is daily work. Defining the vocabulary is not,
+  // and neither is merging, erasing or bulk-importing.
+  'workspace:crm:tags:apply',
 ] as const satisfies readonly Capability[];
 
 /** Trusted operator: everything except deleting the workspace and billing. */
@@ -164,6 +193,12 @@ const ADMIN_CAPABILITIES = [
   'workspace:billing:read',
   'workspace:crm:contacts:archive',
   'workspace:crm:pipelines:manage',
+  // Irreversible or bulk operations on customer data. Admin and owner only.
+  'workspace:crm:contacts:merge',
+  'workspace:crm:contacts:erase',
+  'workspace:crm:contacts:import',
+  'workspace:crm:tags:manage',
+  'workspace:crm:custom_fields:manage',
 ] as const satisfies readonly Capability[];
 
 const OWNER_CAPABILITIES = [

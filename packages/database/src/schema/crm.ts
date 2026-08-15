@@ -33,6 +33,7 @@ import {
   bigint,
   boolean,
   date,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -42,16 +43,19 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {
   ACTOR_TYPES,
   CURRENCIES,
+  CUSTOM_FIELD_TYPES,
   OPPORTUNITY_STATUSES,
   PROVENANCE_CONFIDENCE,
   SOURCE_PLATFORMS,
   SOURCE_TYPES,
   STAGE_CATEGORIES,
+  TAG_TONES,
   TASK_PRIORITIES,
   TASK_STATUSES,
 } from '@growth-os/contracts';
@@ -75,6 +79,8 @@ export const taskStatusEnum = pgEnum('crm_task_status', TASK_STATUSES);
 export const taskPriorityEnum = pgEnum('crm_task_priority', TASK_PRIORITIES);
 export const actorTypeEnum = pgEnum('crm_actor_type', ACTOR_TYPES);
 export const currencyEnum = pgEnum('crm_currency', CURRENCIES);
+export const tagToneEnum = pgEnum('crm_tag_tone', TAG_TONES);
+export const customFieldTypeEnum = pgEnum('crm_custom_field_type', CUSTOM_FIELD_TYPES);
 
 // ---------------------------------------------------------------------------
 // companies
@@ -152,6 +158,36 @@ export const contacts = pgTable(
       onDelete: 'set null',
     }),
 
+    /**
+     * MERGE TOMBSTONE (ADR-0019).
+     *
+     * A merged contact is not hard-deleted and is NOT soft-deleted either —
+     * `deleted_at` means "removed from my list" and this means "this person is
+     * that person". Conflating them would lose the redirect and make "why did
+     * this contact vanish?" unanswerable.
+     *
+     * The API returns `{ mergedInto }` rather than a 404 for these, so a
+     * bookmarked link or an external system's stored id still resolves.
+     *
+     * Self-referential FK, `set null` rather than cascade: losing the survivor
+     * must never delete the tombstone that points at it.
+     */
+    mergedIntoContactId: uuid('merged_into_contact_id').references((): AnyPgColumn => contacts.id, {
+      onDelete: 'set null',
+    }),
+    mergedAt: timestamp('merged_at', { withTimezone: true }),
+    mergedByUserId: uuid('merged_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+
+    /**
+     * ERASURE TOMBSTONE (ADR-0020).
+     *
+     * Set when identity has been irreversibly anonymised in place. The row
+     * survives so the commercial record (acquisitions, deals, revenue) stays
+     * intact — only the *who* is gone. There is no path back.
+     */
+    erasedAt: timestamp('erased_at', { withTimezone: true }),
+    erasedByUserId: uuid('erased_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+
     createdByUserId: uuid('created_by_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),
@@ -162,6 +198,10 @@ export const contacts = pgTable(
     index('contacts_workspace_created_idx').on(table.workspaceId, table.createdAt),
     index('contacts_workspace_owner_idx').on(table.workspaceId, table.ownerUserId),
     index('contacts_workspace_company_idx').on(table.workspaceId, table.companyId),
+    /** "Show me everything that folded into this survivor." */
+    index('contacts_merged_into_idx')
+      .on(table.mergedIntoContactId)
+      .where(sql`${table.mergedIntoContactId} is not null`),
 
     /**
      * Identity lookup indexes, PARTIAL on live rows.
@@ -173,13 +213,22 @@ export const contacts = pgTable(
      *
      * Restricting to `deleted_at IS NULL` also keeps the index small and means
      * an archived contact's address is immediately reusable.
+     *
+     * MERGED AND ERASED ROWS ARE EXCLUDED TOO (Stage 2.5). A merge tombstone
+     * still holds the duplicate's email until it is folded into the survivor;
+     * matching against it would attach new acquisitions to a redirect rather
+     * than to the real person. An erased contact has no identity left to match.
      */
     index('contacts_workspace_email_idx')
       .on(table.workspaceId, table.emailNormalised)
-      .where(sql`${table.deletedAt} is null and ${table.emailNormalised} is not null`),
+      .where(
+        sql`${table.deletedAt} is null and ${table.mergedAt} is null and ${table.erasedAt} is null and ${table.emailNormalised} is not null`,
+      ),
     index('contacts_workspace_phone_idx')
       .on(table.workspaceId, table.phoneE164)
-      .where(sql`${table.deletedAt} is null and ${table.phoneE164} is not null`),
+      .where(
+        sql`${table.deletedAt} is null and ${table.mergedAt} is null and ${table.erasedAt} is null and ${table.phoneE164} is not null`,
+      ),
   ],
 );
 
@@ -588,6 +637,200 @@ export const invitations = pgTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// tags
+// ---------------------------------------------------------------------------
+
+/**
+ * Workspace-defined labels for contacts (Stage 2.5).
+ *
+ * A CONTROLLED VOCABULARY, NOT FREE TEXT ON THE CONTACT. Tags are rows, so
+ * renaming "vip" to "VIP client" is one UPDATE rather than a rewrite of every
+ * contact, and "which contacts are tagged X?" is an index lookup rather than a
+ * string scan.
+ */
+export const tags = pgTable(
+  'tags',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+
+    /** As typed, for display. */
+    name: text('name').notNull(),
+    /**
+     * Trimmed, lowercased, whitespace collapsed. The uniqueness key, so that
+     * "Hot Lead" and "hot lead" cannot both exist and silently split a segment
+     * in two.
+     */
+    slug: text('slug').notNull(),
+
+    tone: tagToneEnum('tone').notNull().default('neutral'),
+
+    /** Archive, not delete — deleting would silently untag every contact. */
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    /**
+     * Unconditionally unique, including archived rows: re-creating a tag whose
+     * name matches an archived one should restore that tag rather than produce
+     * a second identity for the same concept.
+     */
+    uniqueIndex('tags_workspace_slug_unique').on(table.workspaceId, table.slug),
+    index('tags_workspace_idx').on(table.workspaceId),
+  ],
+);
+
+/**
+ * Contact ↔ tag assignment.
+ *
+ * Carries `workspace_id` even though it is derivable from either side, because
+ * RLS policies filter on a column of the row being touched — a join cannot be
+ * expressed in a policy without a subquery on every read.
+ */
+export const contactTags = pgTable(
+  'contact_tags',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+
+    contactId: uuid('contact_id')
+      .notNull()
+      .references(() => contacts.id, { onDelete: 'cascade' }),
+    tagId: uuid('tag_id')
+      .notNull()
+      .references(() => tags.id, { onDelete: 'cascade' }),
+
+    taggedByUserId: uuid('tagged_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Applying a tag twice is a no-op, not a duplicate row.
+    uniqueIndex('contact_tags_contact_tag_unique').on(table.contactId, table.tagId),
+    // "Every contact with this tag" — the segment query.
+    index('contact_tags_workspace_tag_idx').on(table.workspaceId, table.tagId),
+    index('contact_tags_contact_idx').on(table.contactId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// custom fields (contact-scoped)
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-workspace custom field definitions for contacts (ADR-0022).
+ *
+ * WHY A DEFINITIONS TABLE RATHER THAN A JSONB COLUMN
+ * Because erasure has to be able to *enumerate* every place PII lives. A
+ * free-form `contacts.custom_data` blob is precisely the shadow PII store that
+ * an erasure routine misses, and it validates nothing — a "number" field would
+ * happily accept "probably 40ish".
+ *
+ * Contact-scoped rather than polymorphic: see ADR-0022. A polymorphic
+ * `entity_type`/`entity_id` pair cannot carry a foreign key, and these rows
+ * hold customer data that must cascade correctly.
+ */
+export const contactFieldDefinitions = pgTable(
+  'contact_field_definitions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+
+    /** Stable machine key. Never changes; the label is what users rename. */
+    key: text('key').notNull(),
+    label: text('label').notNull(),
+
+    type: customFieldTypeEnum('type').notNull(),
+
+    /**
+     * Enforced at the SERVICE, not by a NOT NULL constraint. Making a field
+     * required later must not retroactively invalidate rows entered before the
+     * rule existed.
+     */
+    required: boolean('required').notNull().default(false),
+
+    /** `single_select` choices. Empty for every other type. */
+    options: jsonb('options').$type<readonly string[]>(),
+
+    position: integer('position').notNull().default(0),
+
+    /** Archive, not delete — deleting would destroy data the workspace entered. */
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('contact_field_definitions_workspace_key_unique').on(table.workspaceId, table.key),
+    index('contact_field_definitions_workspace_position_idx').on(table.workspaceId, table.position),
+  ],
+);
+
+/**
+ * Custom field values.
+ *
+ * FOUR TYPED COLUMNS, EXACTLY ONE POPULATED (enforced by a CHECK constraint in
+ * the migration). A single `value text` column would sort `"10"` before `"9"`
+ * and make date ranges impossible; four nullable columns cost a little width
+ * and buy correct comparison for free.
+ */
+export const contactFieldValues = pgTable(
+  'contact_field_values',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+
+    definitionId: uuid('definition_id')
+      .notNull()
+      .references(() => contactFieldDefinitions.id, { onDelete: 'cascade' }),
+    contactId: uuid('contact_id')
+      .notNull()
+      .references(() => contacts.id, { onDelete: 'cascade' }),
+
+    valueText: text('value_text'),
+    /**
+     * `double precision`, NOT money. Custom numbers are counts, sizes and
+     * ratings — currency has its own minor-unit bigint columns, and mixing the
+     * two here would invite a float into a financial total.
+     */
+    valueNumber: doublePrecision('value_number'),
+    valueBoolean: boolean('value_boolean'),
+    valueDate: date('value_date'),
+
+    updatedByUserId: uuid('updated_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // One value per field per contact. Setting it again updates in place.
+    uniqueIndex('contact_field_values_definition_contact_unique').on(
+      table.definitionId,
+      table.contactId,
+    ),
+    // The erasure and detail-page query: every custom value for one contact.
+    index('contact_field_values_contact_idx').on(table.contactId),
+    index('contact_field_values_workspace_idx').on(table.workspaceId),
+  ],
+);
+
 export type CompanyRow = typeof companies.$inferSelect;
 export type ContactRow = typeof contacts.$inferSelect;
 export type AcquisitionRow = typeof acquisitions.$inferSelect;
@@ -597,3 +840,7 @@ export type OpportunityRow = typeof opportunities.$inferSelect;
 export type TaskRow = typeof tasks.$inferSelect;
 export type ActivityRow = typeof activities.$inferSelect;
 export type InvitationRow = typeof invitations.$inferSelect;
+export type TagRow = typeof tags.$inferSelect;
+export type ContactTagRow = typeof contactTags.$inferSelect;
+export type ContactFieldDefinitionRow = typeof contactFieldDefinitions.$inferSelect;
+export type ContactFieldValueRow = typeof contactFieldValues.$inferSelect;

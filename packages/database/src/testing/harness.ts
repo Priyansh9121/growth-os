@@ -91,6 +91,21 @@ export async function createTestHarness(): Promise<TestHarness> {
     sql.raw(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE}`),
   );
 
+  // EXECUTE on the lifecycle functions, granted HERE rather than relied upon
+  // from migration 0004.
+  //
+  // The migration grants to this role only if it already exists, and on a
+  // fresh database `migrate()` above runs BEFORE the role is created — so the
+  // grant would silently be skipped and every merge and erasure test would
+  // fail with "permission denied for function", which reads like a bug in the
+  // feature rather than in the harness.
+  await owner.execute(
+    sql.raw(`
+      GRANT EXECUTE ON FUNCTION crm_merge_contacts(uuid, uuid, uuid, uuid) TO ${APP_ROLE};
+      GRANT EXECUTE ON FUNCTION crm_erase_contact(uuid, uuid, uuid) TO ${APP_ROLE};
+    `),
+  );
+
   const appUrl = new URL(connectionString);
   appUrl.username = APP_ROLE;
   appUrl.password = APP_ROLE_PASSWORD;
@@ -103,7 +118,10 @@ export async function createTestHarness(): Promise<TestHarness> {
     // are stable across runs. Run as owner — the app role must not be able to
     // truncate, and if it could, that would itself be a finding.
     await owner.execute(
-      sql`TRUNCATE TABLE activities, tasks, opportunities, pipeline_stages, pipelines, acquisitions, contacts, companies, invitations, audit_events, agency_memberships, memberships, sessions, workspaces, agencies, users RESTART IDENTITY CASCADE`,
+      // Every tenant table, including the Stage 2.5 additions. A table missing
+      // from this list leaks rows between test cases, which surfaces as a test
+      // that passes alone and fails in a suite — the worst kind to debug.
+      sql`TRUNCATE TABLE erasure_requests, import_batches, ingestion_receipts, contact_field_values, contact_field_definitions, contact_tags, tags, activities, tasks, opportunities, pipeline_stages, pipelines, acquisitions, contacts, companies, invitations, audit_events, agency_memberships, memberships, sessions, workspaces, agencies, users RESTART IDENTITY CASCADE`,
     );
   }
 

@@ -153,6 +153,11 @@ export const ACTIVITY_TYPES = {
   TASK_COMPLETED: 'task.completed',
   TASK_CANCELLED: 'task.cancelled',
   NOTE_ADDED: 'note.added',
+  CONTACT_MERGED: 'contact.merged',
+  CONTACT_ERASED: 'contact.erased',
+  CONTACT_TAGGED: 'contact.tagged',
+  CONTACT_UNTAGGED: 'contact.untagged',
+  CONTACT_IMPORTED: 'contact.imported',
 } as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[keyof typeof ACTIVITY_TYPES];
@@ -160,3 +165,117 @@ export type ActivityType = (typeof ACTIVITY_TYPES)[keyof typeof ACTIVITY_TYPES];
 /** Currencies accepted at Stage 2. Deliberately short; extend as customers need. */
 export const CURRENCIES = ['AUD', 'NZD', 'USD', 'GBP', 'EUR', 'CAD'] as const;
 export type Currency = (typeof CURRENCIES)[number];
+
+// ---------------------------------------------------------------------------
+// Stage 2.5 — data lifecycle
+// ---------------------------------------------------------------------------
+
+/**
+ * Tag colour tones.
+ *
+ * A CLOSED SET, NOT A COLOUR PICKER. Free-form hex would let a workspace choose
+ * a colour that fails contrast against either theme, and there is no way to
+ * repair that afterwards without overriding the customer's own choice. These
+ * four map onto design-system tokens that are already verified in light and
+ * dark, so every tag is legible by construction.
+ */
+export const TAG_TONES = ['neutral', 'signal', 'attention', 'critical'] as const;
+export type TagTone = (typeof TAG_TONES)[number];
+
+/**
+ * Custom field types.
+ *
+ * Five, deliberately. Each additional type is a validation rule, a storage
+ * column, a rendering branch and a comparison semantic — not a line in a list.
+ * Formulas, computed fields and cross-record references are excluded on
+ * purpose: they are a different product with a different risk profile
+ * (ADR-0022).
+ */
+export const CUSTOM_FIELD_TYPES = ['text', 'number', 'boolean', 'date', 'single_select'] as const;
+export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
+
+export const CUSTOM_FIELD_TYPE_LABELS: Readonly<Record<CustomFieldType, string>> = {
+  text: 'Text',
+  number: 'Number',
+  boolean: 'Yes / no',
+  date: 'Date',
+  single_select: 'Choice',
+};
+
+/**
+ * How an ingestion request resolved.
+ *
+ * `duplicate` is a SUCCESS, not an error: it means the idempotency key was
+ * seen before and the original result is being returned unchanged. A retrying
+ * webhook must be able to tell "already done" from "failed" (ADR-0021).
+ */
+export const INGESTION_OUTCOMES = ['created', 'duplicate'] as const;
+export type IngestionOutcome = (typeof INGESTION_OUTCOMES)[number];
+
+/**
+ * Whether an ingested acquisition attached to a known person or made a new one.
+ *
+ * Reported back to the caller and carried on the domain event, because "we
+ * created 40 leads" and "we created 40 contacts" are very different facts.
+ */
+export const INGESTION_MATCH_RESULTS = ['matched_existing', 'created_new'] as const;
+export type IngestionMatchResult = (typeof INGESTION_MATCH_RESULTS)[number];
+
+/**
+ * Contact matching policy for an ingestion.
+ *
+ * Distinct from merging: attaching an INCOMING acquisition to a known person is
+ * safe and re-pointable, whereas merging two EXISTING contacts is destructive
+ * and requires a human (ADR-0019).
+ */
+export const INGESTION_MATCH_POLICIES = ['match_then_create', 'always_create'] as const;
+export type IngestionMatchPolicy = (typeof INGESTION_MATCH_POLICIES)[number];
+
+/**
+ * Import batch lifecycle.
+ *
+ * `partial` exists because whole-file validation with chunked writes makes a
+ * partially-successful import genuinely possible, and the status must say so
+ * rather than rounding to `completed` or `failed` (ADR-0023).
+ */
+export const IMPORT_BATCH_STATUSES = [
+  'validating',
+  'ready',
+  'importing',
+  'completed',
+  'partial',
+  'failed',
+] as const;
+export type ImportBatchStatus = (typeof IMPORT_BATCH_STATUSES)[number];
+
+/**
+ * The closed set of contact fields a CSV column may be mapped to.
+ *
+ * An ALLOWLIST, not a column name. If mapping targeted database columns
+ * directly, a crafted mapping could write `workspace_id` — so the mapping is
+ * resolved through this set and an unknown target is rejected (ADR-0023 §5).
+ *
+ * `source_detail` maps to the acquisition's `channel_detail`, NEVER to
+ * `source_type`: a spreadsheet column saying "Google" is a human's
+ * recollection, not a measurement (ADR-0012).
+ */
+export const IMPORT_FIELD_TARGETS = [
+  'firstName',
+  'lastName',
+  'email',
+  'phone',
+  'companyName',
+  'sourceDetail',
+  'ignore',
+] as const;
+export type ImportFieldTarget = (typeof IMPORT_FIELD_TARGETS)[number];
+
+export const IMPORT_FIELD_TARGET_LABELS: Readonly<Record<ImportFieldTarget, string>> = {
+  firstName: 'First name',
+  lastName: 'Last name',
+  email: 'Email',
+  phone: 'Phone',
+  companyName: 'Company',
+  sourceDetail: 'Source note',
+  ignore: 'Do not import',
+};
