@@ -21,7 +21,7 @@
 import type { Metadata } from 'next';
 import { Surface } from '@growth-os/ui';
 import { requireAuthContext } from '../../../server/auth-context';
-import { buildFixtureSnapshot } from '../../../lib/fixtures/growth-demo';
+import { buildGrowthSnapshot } from '../../../server/growth-snapshot';
 import { EntranceStep } from '../../../components/shell/app-shell';
 import { HeadlineMetric, MetricCard } from '../../../components/dashboard/metric-card';
 import { OpportunityList } from '../../../components/dashboard/opportunity-list';
@@ -31,7 +31,7 @@ export const metadata: Metadata = { title: 'Home' };
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
-  const { workspace } = await requireAuthContext('/dashboard');
+  const { actor, workspace } = await requireAuthContext('/dashboard');
 
   // A user can legitimately have no workspaces — a newly invited agency member
   // with no clients yet. Handled rather than assumed away.
@@ -47,12 +47,11 @@ export default async function DashboardPage() {
     );
   }
 
-  // Generated server-side and passed down, so server and client renders agree.
-  const snapshot = buildFixtureSnapshot(
-    workspace.workspaceId,
-    workspace.workspaceName,
-    new Date().toISOString(),
-  );
+  // Stage 2: CRM metrics are counted LIVE from this workspace's rows; SEO,
+  // call and revenue metrics remain fixtures because no source exists yet.
+  // Provenance is per-metric, so a demo value can never be mistaken for a
+  // measured one (Principle 3).
+  const snapshot = await buildGrowthSnapshot(actor, workspace, new Date().toISOString());
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -69,9 +68,10 @@ export default async function DashboardPage() {
               role="note"
               className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-attention/40 bg-attention-dim/15 px-4 py-2.5 text-caption"
             >
-              <span className="font-semibold text-attention uppercase">Demo data</span>
+              <span className="font-semibold text-attention uppercase">Mixed data</span>
               <span className="text-text-muted">
-                Every figure on this page is a development fixture. No SEO, CRM, call or revenue
+                CRM figures are counted from this workspace&rsquo;s own records. Metrics badged
+                &ldquo;Demo&rdquo; are development fixtures — no SEO, call-tracking or revenue
                 source is connected yet.
               </span>
             </div>
