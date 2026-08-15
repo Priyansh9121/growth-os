@@ -1,0 +1,129 @@
+# Growth OS continuous integration.
+#
+# Every gate that `npm run verify:all` runs locally, plus the production build
+# and the integration suite against a real PostgreSQL.
+#
+# DESIGN NOTE: the integration job connects as a RESTRICTED, NON-OWNER role.
+# PostgreSQL exempts superusers from row-level security, so running these tests
+# as the postgres superuser would make every tenant-isolation assertion pass
+# vacuously — the worst possible failure mode for a security test.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same branch; only the latest matters.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  quality:
+    name: Format, lint, types, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # `ci` not `install`: fails on a lockfile mismatch rather than silently
+      # resolving different versions than a developer has.
+      - run: npm ci
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      # Both verifiers exist because a silently misconfigured check is worse
+      # than no check. They test the checks themselves.
+      - name: Verify module boundaries are actually enforced
+        run: npm run verify:boundaries
+
+      - name: Verify .gitignore hides no first-party source
+        run: npm run verify:gitignore
+
+  integration:
+    name: Integration tests (real PostgreSQL)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: growth_os_owner
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: growth_os_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U growth_os_owner"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Integration tests
+        # The harness creates its own restricted role and asserts it is not a
+        # superuser before running any isolation assertion.
+        env:
+          TEST_DATABASE_URL: postgresql://growth_os_owner:ci_only_password@localhost:5432/growth_os_test
+        run: npm run test:integration
+
+  component:
+    name: Component and accessibility tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Component tests
+        run: npm run test:web
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+
+      - name: Build
+        # Build-time placeholders only. No real secret is needed to compile,
+        # and no real secret should ever be available to a build job.
+        env:
+          NODE_ENV: production
+          APP_URL: https://ci.invalid
+          DATABASE_URL: postgresql://build:build@localhost:5432/build
+          SESSION_SECRET: ci-build-placeholder-secret-not-used-at-runtime
+        run: npm run build

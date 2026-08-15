@@ -1,0 +1,35 @@
+# Local development infrastructure.
+#
+# NOT a production deployment. Production topology is documented in
+# docs/architecture/deployment-architecture.md.
+#
+#   docker compose -f infrastructure/docker-compose.yml up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: growth-os-postgres
+    restart: unless-stopped
+    environment:
+      # Local-only credentials. The application connects as a RESTRICTED role
+      # created by create-app-role.sql — never as this superuser, because
+      # PostgreSQL exempts superusers from row-level security and our tenant
+      # isolation backstop would be silently inert.
+      POSTGRES_USER: growth_os_owner
+      POSTGRES_PASSWORD: local_development_only
+      POSTGRES_DB: growth_os
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8'
+    ports:
+      - '5432:5432'
+    volumes:
+      - growth-os-pgdata:/var/lib/postgresql/data
+      # Runs once on first initialisation: creates growth_os_test and the
+      # restricted application role.
+      - ./create-app-role.sql:/docker-entrypoint-initdb.d/01-create-app-role.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U growth_os_owner -d growth_os']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  growth-os-pgdata:
