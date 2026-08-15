@@ -82,6 +82,31 @@ export const CAPABILITIES = [
   // Audit
   'workspace:audit:read',
 
+  /**
+   * CRM (Stage 2).
+   *
+   * These use a four-segment form, `workspace:crm:<resource>:<action>`, rather
+   * than the three-segment form used above. The CRM has enough distinct
+   * resources that folding them into the generic `workspace:data:*`
+   * capabilities would make "may this role archive a contact?" unanswerable
+   * without also granting the ability to delete integrations.
+   *
+   * Read and write are separated per resource so that a future Reception role
+   * can manage tasks without editing the pipeline, and a Marketing role can
+   * read opportunities without moving deals.
+   */
+  'workspace:crm:contacts:read',
+  'workspace:crm:contacts:write',
+  'workspace:crm:contacts:archive',
+  'workspace:crm:companies:read',
+  'workspace:crm:companies:write',
+  'workspace:crm:opportunities:read',
+  'workspace:crm:opportunities:write',
+  'workspace:crm:pipelines:manage',
+  'workspace:crm:tasks:read',
+  'workspace:crm:tasks:write',
+  'workspace:crm:activities:read',
+
   // Agency scope
   'agency:read',
   'agency:update',
@@ -100,6 +125,12 @@ const VIEWER_CAPABILITIES = [
   'workspace:members:read',
   'workspace:data:read',
   'workspace:integrations:read',
+  // A viewer sees the CRM but changes nothing, and cannot export (above).
+  'workspace:crm:contacts:read',
+  'workspace:crm:companies:read',
+  'workspace:crm:opportunities:read',
+  'workspace:crm:tasks:read',
+  'workspace:crm:activities:read',
 ] as const satisfies readonly Capability[];
 
 /** A day-to-day operator: reads and writes operational data. */
@@ -108,6 +139,14 @@ const MEMBER_CAPABILITIES = [
   'workspace:data:write',
   'workspace:export',
   'workspace:ai:query',
+  // Day-to-day CRM operation: create and edit records, move deals, run tasks.
+  // Deliberately WITHOUT contacts:archive and pipelines:manage — removing a
+  // customer record and reshaping the sales process are administrative acts,
+  // not daily ones.
+  'workspace:crm:contacts:write',
+  'workspace:crm:companies:write',
+  'workspace:crm:opportunities:write',
+  'workspace:crm:tasks:write',
 ] as const satisfies readonly Capability[];
 
 /** Trusted operator: everything except deleting the workspace and billing. */
@@ -123,6 +162,8 @@ const ADMIN_CAPABILITIES = [
   'workspace:ai:configure_autonomy',
   'workspace:audit:read',
   'workspace:billing:read',
+  'workspace:crm:contacts:archive',
+  'workspace:crm:pipelines:manage',
 ] as const satisfies readonly Capability[];
 
 const OWNER_CAPABILITIES = [

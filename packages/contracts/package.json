@@ -11,7 +11,8 @@
     "./tenancy": "./src/tenancy/index.ts",
     "./growth": "./src/growth/index.ts",
     "./ai": "./src/ai/index.ts",
-    "./env": "./src/env.ts"
+    "./env": "./src/env.ts",
+    "./crm": "./src/crm/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
