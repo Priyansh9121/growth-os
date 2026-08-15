@@ -22,6 +22,7 @@ import { getDatabase, type Database } from '@growth-os/database';
 import {
   ConsolePasswordResetNotifier,
   MemoryRateLimiter,
+  UnconfiguredPasswordResetNotifier,
   type PasswordResetDependencies,
   type PasswordResetNotifier,
   type RateLimiter,
@@ -85,21 +86,25 @@ export function getDependencies(): AppDependencies {
 /**
  * Choose the reset-link delivery mechanism.
  *
- * ⚠️ THROWS IN PRODUCTION rather than falling back to the console notifier.
+ * Development gets the console notifier, which prints the link — and is why
+ * that class must never run in production, since the link is the credential.
  *
- * A no-op notifier in production means resets that are requested, never
- * delivered, and never noticed — users locked out of a CRM holding their
- * business, with nothing in any log to explain it. Refusing to boot is loud,
- * immediate, and impossible to miss; the alternative is silent and discovered
- * by a customer. Same rule as the invitation notifier (ADR-0018).
+ * ⚠️ Production gets a notifier that THROWS WHEN USED. Not one that throws at
+ * boot: an earlier version did that, and it took the entire application down —
+ * CRM, dashboard, sign-in — because one optional delivery channel was
+ * unconfigured. Failing at the point of use still makes the problem impossible
+ * to miss (a visible error for the person who asked, a stack trace in the log,
+ * an audit record of the attempt) without holding the rest of the product
+ * hostage to it.
+ *
+ * What is NOT acceptable in either environment is a silent no-op: a reset
+ * requested, never delivered, and never noticed (ADR-0018's rule for
+ * invitations, applied here).
  */
 function resolvePasswordResetNotifier(env: Env): PasswordResetNotifier {
-  if (env.NODE_ENV === 'production') {
-    throw new Error(
-      'No password reset delivery is configured. Wire a transactional email provider before running in production.',
-    );
-  }
-  return new ConsolePasswordResetNotifier();
+  return env.NODE_ENV === 'production'
+    ? new UnconfiguredPasswordResetNotifier()
+    : new ConsolePasswordResetNotifier();
 }
 
 /**
