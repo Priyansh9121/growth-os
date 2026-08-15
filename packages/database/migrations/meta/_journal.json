@@ -43,6 +43,13 @@
       "when": 1786775252044,
       "tag": "0005_password_reset",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786775253044,
+      "tag": "0006_activities_actor_cascade",
+      "breakpoints": true
     }
   ]
 }
