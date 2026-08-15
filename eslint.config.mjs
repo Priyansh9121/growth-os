@@ -229,6 +229,29 @@ export default tseslint.config(
           paths: [
             { name: 'next', message: 'Domain packages must not depend on Next.js.' },
             { name: 'react', message: 'Domain packages must not depend on React.' },
+            // THE CRM MUST NEVER TOUCH THE FILESYSTEM.
+            //
+            // Added for CSV import (ADR-0023 §6): the uploaded file is parsed
+            // from the request body in memory and discarded, so there is no
+            // upload directory to leak, scan, or forget to clean up — and no
+            // path for a customer's contact list to be written somewhere it
+            // can be committed by accident. A rule beats a convention here,
+            // because the convenient thing to do under time pressure is to
+            // spool the file to /tmp.
+            {
+              name: 'node:fs',
+              message:
+                'The CRM must never touch the filesystem. Customer files are parsed in memory and discarded (ADR-0023 §6).',
+            },
+            {
+              name: 'node:fs/promises',
+              message:
+                'The CRM must never touch the filesystem. Customer files are parsed in memory and discarded (ADR-0023 §6).',
+            },
+            {
+              name: 'fs',
+              message: 'The CRM must never touch the filesystem (ADR-0023 §6).',
+            },
           ],
           patterns: [
             {

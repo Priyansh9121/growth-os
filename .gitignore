@@ -160,3 +160,28 @@ desktop.ini
 # -----------------------------------------------------------------------------
 /tmp/
 /.scratch/
+
+# -----------------------------------------------------------------------------
+# Customer data that must never be committed (Stage 2.5)
+# -----------------------------------------------------------------------------
+# CSV import means real contact lists now pass through developers' machines. A
+# customer's export saved next to the code and committed by a wildcard `git add`
+# is a data breach with a git history.
+#
+# ⚠️ DELIBERATELY NOT `*.csv`.
+#
+# Test fixtures are legitimately CSV and MUST stay trackable — a rule that hid
+# every CSV would silently stop `tests/fixtures/contacts.csv` from being
+# committed, and the person who wrote it would not find out until CI failed
+# somewhere unrelated. So the rule is scoped to where a real export actually
+# lands: a directory named for it, and the obvious ad-hoc filenames.
+/customer-data/
+/imports/
+*.export.csv
+*.contacts.csv
+*.customers.csv
+
+# Database dumps, wherever they are written.
+*.dump
+*.sql.gz
+/dumps/
