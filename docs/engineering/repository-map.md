@@ -108,9 +108,10 @@ tenant-scoped transactions, the audit writer, and development seed data.
 **Why separate:** one place owns the schema, so a migration cannot be authored
 from three different mental models — and swapping the ORM has one blast radius.
 
-**Contains:** `schema/` (identity, tenancy, audit) · `client.ts`
-(`withTenantTransaction`) · `audit.ts` (the redacting writer) · `migrations/`
-(reviewed SQL) · `scripts/` (migrate, seed) · `testing/` (the restricted-role
+**Contains:** `schema/` (identity, tenancy, audit, crm, crm-lifecycle) ·
+`client.ts` (`withTenantTransaction`) · `audit.ts` (the redacting writer) ·
+`migrations/` (reviewed SQL, including the two `SECURITY DEFINER` lifecycle
+functions) · `scripts/` (migrate, seed) · `testing/` (the restricted-role
 integration harness).
 
 **May depend on:** `@growth-os/contracts`, `drizzle-orm`, `postgres`.
@@ -141,7 +142,9 @@ today and Fastify later.
 **Contains:** `password.ts` (Argon2id, the dummy-verify enumeration defence) ·
 `session/` (opaque tokens, hashing, sliding expiry) · `authorization/`
 (`resolveActor`, `requireWorkspaceAccess`) · `rate-limit.ts` · `http/`
-(origin validation, safe redirects, cookie descriptors) · `login.ts`.
+(origin validation, safe redirects, cookie descriptors) · `login.ts` ·
+`invitations.ts` · `password-reset.ts` (Stage 2.5 — enumeration-safe request,
+single-use tokens, session revocation on completion).
 
 **May depend on:** `@growth-os/contracts`, `@growth-os/database`,
 `@node-rs/argon2`, `zod`.
@@ -169,11 +172,14 @@ into. The worker (Stage 3) and the voice service boundary (Stage 13) must call
 
 **Contains:** `shared/` (CrmContext, capability guards, `loadInTenant`,
 pagination) · `identity/` (normalisation — the dedup matching keys) ·
-`contacts/` · `companies/` · `acquisitions/` (the provenance write path) ·
-`pipelines/` · `opportunities/` · `tasks/` · `activities/` · `events/`.
+`contacts/` (including `merge.ts` and `erasure.ts`) · `companies/` ·
+`acquisitions/` (the provenance write path) · `pipelines/` · `opportunities/` ·
+`tasks/` · `activities/` · `events/` · `ingestion/` (Stage 2.5 — **the single
+boundary every automated channel calls**) · `import/` (CSV parser and the
+chunked import) · `tags/` · `custom-fields/`.
 
 **May depend on:** `@growth-os/contracts`, `@growth-os/database`,
-`drizzle-orm`, `libphonenumber-js`, `zod`.
+`drizzle-orm`, `libphonenumber-js`, `zod`, `node:crypto`.
 
 **Must NOT:** import `@growth-os/auth` (cycle), `@growth-os/ui`, React, Next.js
 or anything in `apps/`. Decide _who the caller is_ — it receives an

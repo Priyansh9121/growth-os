@@ -92,6 +92,36 @@ be interpreted as SQL.
 (authenticating a user, resolving memberships). It is named conspicuously so
 its use is obvious in review and greppable in an audit.
 
+### ⚠️ The two tables that carry `workspace_id` and have NO row-level security
+
+Both are deliberate, and both are recorded here because "a table with
+`workspace_id` and no policy" is exactly the kind of thing a later audit should
+find an answer attached to.
+
+| Table                   | Why no RLS                                                                                                                                                                                                                              |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `memberships`           | It is the table that **defines** workspace access. `resolveActor` reads a user's memberships across all workspaces before any scope exists, so a policy keyed on `app.workspace_id` would match nothing and break authentication itself |
+| `password_reset_tokens` | User-scoped, not workspace-scoped, and read by someone who is not authenticated. There is no tenant scope to filter by                                                                                                                  |
+
+What protects `memberships` instead is that it is written only by invitation
+acceptance and membership administration — both of which check a capability
+first — and read only through `resolveActor`, which returns exactly one user's
+own memberships. Verify with:
+
+```sql
+-- Every table carrying workspace_id that is not RLS-enabled AND forced.
+-- Expect exactly: memberships.
+SELECT c.relname FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'workspace_id' AND a.attnum > 0
+ WHERE n.nspname = 'public' AND c.relkind = 'r'
+   AND NOT (c.relrowsecurity AND c.relforcerowsecurity);
+```
+
+As of Stage 2.5 that query returns one row. Every other workspace-owned table —
+**seventeen of them** — is ENABLE _and_ FORCE, asserted per table by the
+integration suites.
+
 ## Layer 3 — PostgreSQL row-level security
 
 Defined in

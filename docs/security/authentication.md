@@ -188,7 +188,7 @@ Listed so nothing here is mistaken for a complete authentication product.
 | Missing                   | Stage          | Note                                                                               |
 | ------------------------- | -------------- | ---------------------------------------------------------------------------------- |
 | Self-serve registration   | 2              | Accounts are seeded or invited                                                     |
-| Password reset            | 2              | Needs transactional email                                                          |
+| ~~Password reset~~        | ~~2~~          | **Built (Stage 2.5).** Delivery still needs a provider — see below                 |
 | Email verification        | 2              | Column exists; flow does not                                                       |
 | MFA / TOTP                | 2              | Design below                                                                       |
 | Passkeys / WebAuthn       | TBD            | Likely to overtake TOTP for this segment                                           |
@@ -200,10 +200,55 @@ Listed so nothing here is mistaken for a complete authentication product.
 
 ### Planned MFA shape
 
-TOTP with encrypted secrets, verified at enrolment; single-use recovery codes
-stored hashed; a second session state (`mfa_pending`) that grants no access
-until the challenge is met; step-up re-authentication for high-risk actions
-(billing, member removal, workspace deletion).
+Decided in [ADR-0024](../decisions/ADR-0024-multi-factor-authentication.md),
+implementation gated on the first external production tenant.
+
+TOTP with AES-256-GCM-encrypted secrets under a **dedicated**
+`MFA_ENCRYPTION_KEY` (separate from `SESSION_SECRET`, so one compromise is not
+both), verified at enrolment before it is trusted; ten single-use recovery
+codes stored Argon2id-hashed; a second session state (`mfa_pending`) that
+resolves to zero memberships rather than carrying a flag; step-up
+re-authentication for member removal, role changes, **contact erasure**, bulk
+export and billing.
+
+**SMS is ruled out as a primary factor permanently** — SIM-swap is a routine
+attack against small-business owners.
+
+---
+
+## Password reset (Stage 2.5)
+
+`packages/auth/src/password-reset.ts`.
+
+| Property                 | Choice                                                                           | Why                                                                                    |
+| ------------------------ | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Token                    | 32 bytes, base64url                                                              | Not guessable                                                                          |
+| At rest                  | `SHA-256(HMAC(token, SESSION_SECRET))`                                           | Same construction as sessions. A read-only database leak yields no usable links        |
+| Expiry                   | **60 minutes**                                                                   | Much shorter than an invitation's 7 days: a reset link sits in an inbox                |
+| Single use               | `used_at` claimed inside the consuming transaction, guarded by `used_at IS NULL` | A double-click or a race consumes it exactly once                                      |
+| Other outstanding tokens | All invalidated on success                                                       | A second link forwarded to an attacker dies with the first                             |
+| Sessions                 | **All revoked on success**                                                       | If the reset followed a compromise, leaving the attacker signed in makes it pointless  |
+| Enumeration              | Unknown, disabled and real addresses are indistinguishable                       | Otherwise this endpoint enumerates every customer of the product one address at a time |
+| Failure messages         | Invalid, expired and used give ONE message                                       | Distinguishing them confirms a token was once real                                     |
+| Rate limiting            | 3 per address, 10 per IP, per window                                             | Tighter than sign-in: a reset request sends mail to a real person's inbox              |
+| Secret rotation          | Rotating `SESSION_SECRET` invalidates outstanding links                          | Same keyed hash as sessions                                                            |
+
+**No session is issued on completion.** The user signs in with the new
+password, which proves they know it — a reset link alone is never a session.
+
+`password_reset_tokens` is the first table since Stage 1 with **no row-level
+security**, for the same reason as `users` and `sessions`: it is user-scoped and
+read by someone unauthenticated, so there is no tenant scope to filter by. The
+migration header records that reasoning at length rather than leaving a later
+audit to wonder.
+
+### ⚠️ Delivery is still not configured
+
+Reset links go through a `PasswordResetNotifier`. The development
+implementation prints the link to the server console, and **the composition
+root refuses to boot in production** rather than falling back to it — a silent
+no-op notifier means resets that are requested, never delivered, and never
+noticed. Same rule as invitations.
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Status:** Living document
 **Last reviewed:** 2026-08-15
-**Current stage:** Stage 2 (complete); Stage 3 next
+**Current stage:** Stage 2.5 (complete); Stage 3 next
 
 Stages are a _dependency order_, not a schedule. No dates are given here because
 none would be honest at this point. Each stage lists its objective,
@@ -103,6 +103,37 @@ every CRM entity must carry a `source` provenance field from day one.
 **Definition of done:** A lead can be created, assigned, progressed through a
 pipeline and closed with a value, and the full activity history is queryable
 within one workspace and invisible to another.
+
+---
+
+## Stage 2.5 — Data lifecycle & ingestion readiness ✅
+
+**Objective:** Make the CRM safe to hold real customer data, before automated
+ingestion starts putting real people in it.
+
+Not a planned stage. Inserted because Stage 2 shipped a CRM that could
+_record_ customer data without being able to _correct_ or _remove_ it — and
+Stage 3 begins writing real people into it automatically, at which point every
+one of those gaps becomes a gap holding somebody's information.
+
+**Deliverables:** contact merge (forward-only, previewed) · irreversible PII
+erasure that preserves the commercial record · one canonical ingestion boundary
+with idempotency receipts · bulk CSV import · tags · typed custom fields ·
+companies UI · password reset · a CI bundle-size gate · the MFA decision.
+
+**Dependencies:** Stage 2.
+
+**Risks:** Building a half-working undo. Guard: there is deliberately no
+unmerge and no un-erase — a preview and an explicit confirmation instead,
+because a reversal that is only sometimes correct invites the destructive
+action it cannot actually reverse.
+
+**Definition of done:** A person can ask to be removed and every trace of them
+is gone from the live database while the revenue they generated is still
+reportable; a duplicate can be resolved without losing history; a webhook can
+retry without inflating the lead count. All three asserted by tests that search
+for the data rather than checking the columns the implementation happens to
+touch.
 
 ---
 

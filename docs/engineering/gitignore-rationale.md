@@ -248,3 +248,44 @@ npm run verify:gitignore                  # confirm the fix
 
 Then add the path to `PROBES` in `scripts/verify-gitignore.mjs`, so the same
 mistake cannot recur.
+
+---
+
+## Customer data (Stage 2.5)
+
+CSV import means real contact lists now pass through developers' machines. A
+customer's export saved next to the code and picked up by a wildcard `git add`
+is a data breach with a git history attached.
+
+### ⚠️ Why the rule is NOT `*.csv`
+
+Because test fixtures are legitimately CSV and must stay trackable.
+
+A blanket `*.csv` would silently stop `tests/fixtures/contacts.csv` from being
+committed — and the person who wrote it would not find out at the moment they
+made the mistake, but later, in a CI failure that looks like something else
+entirely. That is the exact failure mode this whole document exists to prevent:
+**`.gitignore` must never hide first-party source.**
+
+So the rules are scoped to where a real export actually lands:
+
+| Pattern                                             | Catches                                   |
+| --------------------------------------------------- | ----------------------------------------- |
+| `/customer-data/`, `/imports/`                      | A directory someone made to hold exports  |
+| `*.export.csv`, `*.contacts.csv`, `*.customers.csv` | The obvious ad-hoc filenames              |
+| `*.dump`, `*.sql.gz`, `/dumps/`                     | Database dumps, wherever they are written |
+
+Two probes in `verify-gitignore.mjs` assert **both directions**: that
+`customer-data/leads.csv` is ignored, and that `tests/fixtures/contacts.csv` is
+**not**. The second is the one that matters — it is what stops a future
+tightening from quietly hiding a fixture.
+
+### The stronger control is architectural
+
+The application **never writes an uploaded file to disk at all**. It is parsed
+from the request body in memory, under a size cap, and discarded — enforced by
+a lint rule forbidding `node:fs` anywhere in `packages/crm`, with a boundary
+probe that proves the rule fires ([ADR-0023](../decisions/ADR-0023-csv-import.md) §6).
+
+`.gitignore` protects against a human saving a file. The lint rule protects
+against the code doing it.
