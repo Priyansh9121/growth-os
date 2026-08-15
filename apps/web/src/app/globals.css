@@ -1,0 +1,86 @@
+/**
+ * Global stylesheet.
+ *
+ * The design tokens live in @growth-os/ui and are imported here. This file
+ * holds only what is genuinely global to the application shell — everything
+ * visual belongs in a token or a component.
+ *
+ * @see packages/ui/src/tokens/tokens.css
+ */
+
+@import 'tailwindcss';
+@import '@growth-os/ui/tokens.css';
+
+/* Tailwind v4 scans for class names from the importing file's directory. The
+   design system's components live outside apps/web, so their classes must be
+   declared explicitly or utilities used only there would be tree-shaken away. */
+@source '../../../../packages/ui/src';
+
+@layer components {
+  /**
+   * Signal-path draw animation for the Growth mark.
+   *
+   * Threshold moments only (sign-in success). The global reduced-motion rule
+   * in the token layer collapses this to effectively instant.
+   */
+  .growth-mark-path {
+    stroke-dasharray: 20;
+    stroke-dashoffset: 20;
+    animation: growth-mark-draw 720ms var(--ease-entrance) forwards;
+  }
+
+  @keyframes growth-mark-draw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  /**
+   * Entrance used by the dashboard shell choreography.
+   *
+   * A single axis (Y) plus opacity — never multiple directions, rotation or
+   * scale-from-zero, which read as a template rather than a product.
+   * See docs/design/motion-system.md §Choreography.
+   */
+  .gos-enter {
+    animation: gos-enter var(--gos-enter-duration, 320ms) var(--ease-entrance) both;
+    animation-delay: var(--gos-enter-delay, 0ms);
+  }
+
+  @keyframes gos-enter {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /* Opacity only: translation is the vestibular trigger, not the fade. */
+    @keyframes gos-enter {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+  }
+
+  /**
+   * Restrained glass. Permitted on exactly three surfaces: the login card, the
+   * sticky top bar, and full-screen overlays (design-system.md §5).
+   *
+   * The backing surface is ≥85% opaque, so text contrast never depends on what
+   * happens to be behind it — glass that relies on the backdrop for legibility
+   * fails the moment a bright element passes underneath.
+   */
+  .gos-glass {
+    background-color: color-mix(in oklch, var(--color-surface-1) 88%, transparent);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  }
+}
