@@ -31,6 +31,7 @@
  * Run with:  npm run db:seed
  */
 
+import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { hash } from '@node-rs/argon2';
@@ -147,6 +148,50 @@ async function main(): Promise<void> {
         .values([{ userId: riley.id, agencyId: agency.id, role: 'agency_admin' }]);
     });
 
+    // ---- CRM demo data --------------------------------------------------
+    // Written through the real CRM services, not raw inserts: that produces a
+    // genuine activity timeline and exercises provenance validation, so a bug
+    // in createContact fails the seed instead of lying dormant.
+    const { seedCrmForWorkspace } = await import('./seed-crm');
+    const { InProcessEventPublisher } = await import('@growth-os/crm');
+
+    const [abc] = await db
+      .select()
+      .from(schema.workspaces)
+      .where(eq(schema.workspaces.slug, 'abc-plumbing'))
+      .limit(1);
+    const [samUser] = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.email, 'sam@abcplumbing.test'))
+      .limit(1);
+
+    let crmCounts = { contacts: 0, opportunities: 0, tasks: 0 };
+    if (abc && samUser) {
+      crmCounts = await seedCrmForWorkspace(db, () => ({
+        deps: { db, events: new InProcessEventPublisher() },
+        tenant: {
+          actor: {
+            userId: samUser.id,
+            email: samUser.email,
+            name: samUser.name,
+            sessionId: 'seed',
+            workspaces: [],
+            agencies: [],
+          },
+          workspace: {
+            workspaceId: abc.id,
+            workspaceName: abc.name,
+            workspaceSlug: abc.slug,
+            agencyId: abc.agencyId,
+            role: 'owner' as const,
+            via: 'direct' as const,
+          },
+        },
+        correlationId: 'seed',
+      }));
+    }
+
     console.log('Seed complete.\n');
     console.log('  Agency     Northbeam Growth Partners');
     console.log('  Workspaces ABC Plumbing, Harbour Dental (agency) · Meridian Legal (direct)\n');
@@ -154,6 +199,10 @@ async function main(): Promise<void> {
     console.log('    sam@abcplumbing.test       owner of ABC Plumbing');
     console.log('    riley@northbeam.test       agency admin — reaches 2 workspaces transitively');
     console.log('    jordan@meridianlegal.test  owner of Meridian Legal\n');
+    console.log('  CRM demo data (ABC Plumbing) — all records fictional:');
+    console.log(
+      `    ${crmCounts.contacts} contacts · ${crmCounts.opportunities} opportunities · ${crmCounts.tasks} tasks\n`,
+    );
   } finally {
     await client.end();
   }

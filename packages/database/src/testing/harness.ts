@@ -23,7 +23,7 @@ import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import * as schema from '../schema/index.js';
+import * as schema from '../schema/index';
 
 const migrationsFolder = resolve(dirname(fileURLToPath(import.meta.url)), '../../migrations');
 
@@ -103,7 +103,7 @@ export async function createTestHarness(): Promise<TestHarness> {
     // are stable across runs. Run as owner — the app role must not be able to
     // truncate, and if it could, that would itself be a finding.
     await owner.execute(
-      sql`TRUNCATE TABLE audit_events, agency_memberships, memberships, sessions, workspaces, agencies, users RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE activities, tasks, opportunities, pipeline_stages, pipelines, acquisitions, contacts, companies, invitations, audit_events, agency_memberships, memberships, sessions, workspaces, agencies, users RESTART IDENTITY CASCADE`,
     );
   }
 
