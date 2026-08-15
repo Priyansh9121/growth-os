@@ -1,0 +1,22 @@
+{
+  "name": "@growth-os/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared types, validation schemas, typed errors and the AI tool contract. No runtime dependencies on I/O.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./errors": "./src/errors/index.ts",
+    "./auth": "./src/auth/index.ts",
+    "./tenancy": "./src/tenancy/index.ts",
+    "./growth": "./src/growth/index.ts",
+    "./ai": "./src/ai/index.ts",
+    "./env": "./src/env.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}

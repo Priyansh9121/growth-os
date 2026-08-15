@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Growth OS base configuration",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+
+    /* Strictness.
+     * `strict` alone is not enough for a product that will hold multi-tenant
+     * data. The four additional flags below each close a class of bug we
+     * cannot afford in authorization or tenancy code:
+     *  - noUncheckedIndexedAccess: `roles[x]` is `Role | undefined`, so a
+     *    missing capability entry cannot silently read as "allowed".
+     *  - exactOptionalPropertyTypes: `{ workspaceId?: string }` cannot be
+     *    satisfied by an explicit `undefined`, which otherwise erases the
+     *    difference between "not scoped" and "scoped to nothing".
+     *  - noImplicitOverride / noFallthroughCasesInSwitch: cheap guards against
+     *    accidental behaviour changes in error hierarchies and state machines.
+     */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "useUnknownInCatchVariables": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* Emit — internal packages are consumed as TypeScript source and compiled
+     * by the consuming app's bundler, so no package emits JavaScript.
+     * See ADR-0002 for why we do not run a per-package build step. */
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "exclude": ["node_modules", "dist", "build", ".next", "coverage"]
+}

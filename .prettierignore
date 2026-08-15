@@ -1,0 +1,12 @@
+# Generated or vendored output — never reformat.
+node_modules/
+.next/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+package-lock.json
+
+# Drizzle-generated SQL migrations and their journal are machine-authored.
+# Reformatting them changes checksums and breaks migration integrity.
+packages/database/migrations/
