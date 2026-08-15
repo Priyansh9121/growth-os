@@ -40,6 +40,11 @@ export const AUDIT_EVENTS = {
   AUTH_LOGIN_FAILED: 'auth.login.failed',
   AUTH_LOGOUT: 'auth.session.revoked',
   AUTH_RATE_LIMITED: 'auth.login.rate_limited',
+  // Password reset (Stage 2.5). Both are recorded because a reset is a
+  // complete account takeover if abused, and "who reset this password, and
+  // did the owner ask for it?" must be answerable afterwards.
+  AUTH_PASSWORD_RESET_REQUESTED: 'auth.password_reset.requested',
+  AUTH_PASSWORD_RESET_COMPLETED: 'auth.password_reset.completed',
   TENANCY_ACCESS_DENIED: 'tenancy.access.denied',
   TENANCY_WORKSPACE_SWITCHED: 'tenancy.workspace.switched',
   AI_QUERY_SUBMITTED: 'ai.query.submitted',

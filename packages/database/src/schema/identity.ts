@@ -130,3 +130,58 @@ export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
 export type SessionRow = typeof sessions.$inferSelect;
 export type NewSessionRow = typeof sessions.$inferInsert;
+
+/**
+ * Password reset tokens (Stage 2.5).
+ *
+ * SAME CONSTRUCTION AS SESSIONS AND INVITATIONS, deliberately: the raw token
+ * is never persisted, only `SHA-256(HMAC(token, SESSION_SECRET))`. A read-only
+ * database leak therefore yields no usable reset links, which matters more here
+ * than anywhere else — a reset token is a complete account takeover.
+ *
+ * WHY A SEPARATE TABLE RATHER THAN COLUMNS ON `users`
+ * Columns on `users` would make every read of a user carry a live credential,
+ * and would make "how many reset attempts has this account had?" unanswerable.
+ * A table also lets an expired or used token stay auditable for a while instead
+ * of being overwritten by the next request.
+ *
+ * @see docs/decisions/ADR-0004-authentication.md
+ * @see docs/security/authentication.md
+ */
+export const passwordResetTokens = pgTable(
+  'password_reset_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+
+    /** `SHA-256(HMAC(token, SESSION_SECRET))`. The raw token exists only in the email. */
+    tokenHash: text('token_hash').notNull(),
+
+    /**
+     * Short by design — 60 minutes. A reset link sits in an inbox, which is
+     * exactly where an attacker who already has mailbox access is looking.
+     */
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+
+    /** Set inside the consuming transaction. This is what makes it single-use. */
+    usedAt: timestamp('used_at', { withTimezone: true }),
+
+    /**
+     * Recorded for the security audit trail, NOT for rate limiting — the
+     * limiter runs before a token exists.
+     */
+    requestedIp: text('requested_ip'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('password_reset_tokens_hash_unique').on(table.tokenHash),
+    // "Invalidate every outstanding token for this user" — issued on a
+    // successful reset and on a password change.
+    index('password_reset_tokens_user_idx').on(table.userId, table.createdAt),
+  ],
+);
+
+export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;

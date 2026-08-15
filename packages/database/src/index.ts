@@ -10,7 +10,13 @@ export * from './client';
 export * from './audit';
 export * as schemaTables from './schema/index';
 export { AUDIT_EVENTS, type AuditEventName } from './schema/audit';
-export type { UserRow, NewUserRow, SessionRow, NewSessionRow } from './schema/identity';
+export type {
+  UserRow,
+  NewUserRow,
+  SessionRow,
+  NewSessionRow,
+  PasswordResetTokenRow,
+} from './schema/identity';
 export type {
   AgencyRow,
   WorkspaceRow,

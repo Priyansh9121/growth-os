@@ -107,3 +107,34 @@ export const switchWorkspaceInputSchema = z.object({
 });
 
 export type SwitchWorkspaceInput = z.infer<typeof switchWorkspaceInputSchema>;
+
+// ---------------------------------------------------------------------------
+// Password reset (Stage 2.5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Request a reset link.
+ *
+ * Only the address. Deliberately no "are you a robot?" field, no security
+ * question and no account hint — every extra input here is another signal an
+ * attacker can use to distinguish a real account from a fabricated one.
+ */
+export const requestPasswordResetSchema = z.object({
+  email: emailSchema,
+});
+
+export type RequestPasswordResetInput = z.infer<typeof requestPasswordResetSchema>;
+
+/**
+ * Complete a reset.
+ *
+ * The password uses the SAME schema as sign-up and change-password. If reset
+ * accepted a weaker password than the rest of the product, it would become the
+ * easiest way to put a weak password on an account.
+ */
+export const completePasswordResetSchema = z.object({
+  token: z.string().min(1).max(256),
+  password: newPasswordSchema,
+});
+
+export type CompletePasswordResetInput = z.infer<typeof completePasswordResetSchema>;
