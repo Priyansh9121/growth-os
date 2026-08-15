@@ -20,3 +20,21 @@ export type {
   NewMembershipRow,
 } from './schema/tenancy';
 export type { AuditEventRow, NewAuditEventRow } from './schema/audit';
+
+/**
+ * Integration test harness.
+ *
+ * Exported from the package root so suites in OTHER packages (the CRM service
+ * tests) get the same restricted-role connection this package's own tests use.
+ * Without that, a service suite would quietly run as the owner and prove
+ * nothing about row-level security.
+ *
+ * Test-only. Nothing in the application imports it, and `createTestHarness`
+ * throws unless `TEST_DATABASE_URL` is set.
+ */
+export {
+  assertRestrictedRole,
+  createTestHarness,
+  hasTestDatabase,
+  type TestHarness,
+} from './testing/harness';

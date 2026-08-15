@@ -20,7 +20,13 @@
  * through a tenant-scoped service, which re-checks authorization.
  */
 
-import type { ActorType, OpportunityStatus, SourceType, TaskPriority } from './enums';
+import type {
+  ActorType,
+  IngestionMatchResult,
+  OpportunityStatus,
+  SourceType,
+  TaskPriority,
+} from './enums';
 
 /** Every domain event carries its tenant, so a subscriber can never act unscoped. */
 interface DomainEventBase {
@@ -80,13 +86,78 @@ export interface TaskCompletedEvent extends DomainEventBase {
   readonly taskId: string;
 }
 
+// ---------------------------------------------------------------------------
+// Data lifecycle (Stage 2.5)
+// ---------------------------------------------------------------------------
+
+/**
+ * The canonical automated-write event.
+ *
+ * Emitted by `ingestAcquisition` for EVERY channel — forms, voice, ads,
+ * webhooks — so a subscriber counting leads counts them once, in one shape,
+ * regardless of which integration produced them.
+ *
+ * NOT emitted for a `duplicate` outcome: an idempotent retry made no new
+ * facts, and re-emitting would let a retry inflate downstream counters even
+ * though the database correctly refused to.
+ */
+export interface AcquisitionIngestedEvent extends DomainEventBase {
+  readonly name: 'crm.acquisition.ingested';
+  readonly acquisitionId: string;
+  readonly contactId: string;
+  readonly opportunityId: string | null;
+  readonly sourceType: SourceType;
+  /** Whether the lead attached to a known person or created a new one. */
+  readonly match: IngestionMatchResult;
+  /** Which adapter called. Not the payload, and never the person's details. */
+  readonly sourceSystem: string | null;
+}
+
+/**
+ * Two contacts were consolidated.
+ *
+ * Subscribers that cache contact ids MUST handle this: after it, the merged id
+ * resolves to a redirect rather than a record.
+ */
+export interface ContactMergedEvent extends DomainEventBase {
+  readonly name: 'crm.contact.merged';
+  readonly survivorId: string;
+  readonly mergedContactId: string;
+  readonly movedOpportunities: number;
+}
+
+/**
+ * A contact's identity was irreversibly erased.
+ *
+ * Carries counts and ids only — an event describing an erasure must not be a
+ * copy of what was erased. Subscribers holding a cached name must drop it.
+ */
+export interface ContactErasedEvent extends DomainEventBase {
+  readonly name: 'crm.contact.erased';
+  readonly contactId: string;
+  readonly clearedActivities: number;
+}
+
+/** A CSV import finished. `partial` is a real, reportable outcome. */
+export interface ContactsImportedEvent extends DomainEventBase {
+  readonly name: 'crm.contacts.imported';
+  readonly batchId: string;
+  readonly importedRows: number;
+  readonly matchedExistingRows: number;
+  readonly failedRows: number;
+}
+
 export type CrmDomainEvent =
   | ContactCreatedEvent
   | AcquisitionRecordedEvent
   | OpportunityCreatedEvent
   | OpportunityStageChangedEvent
   | TaskCreatedEvent
-  | TaskCompletedEvent;
+  | TaskCompletedEvent
+  | AcquisitionIngestedEvent
+  | ContactMergedEvent
+  | ContactErasedEvent
+  | ContactsImportedEvent;
 
 export type CrmDomainEventName = CrmDomainEvent['name'];
 

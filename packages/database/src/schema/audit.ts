@@ -55,6 +55,16 @@ export const AUDIT_EVENTS = {
   CRM_INVITATION_CREATED: 'crm.invitation.created',
   CRM_INVITATION_ACCEPTED: 'crm.invitation.accepted',
   CRM_INVITATION_REVOKED: 'crm.invitation.revoked',
+
+  // Data lifecycle (Stage 2.5). Both are irreversible and privileged, so both
+  // are recorded here in addition to the business timeline — and neither
+  // record carries the values involved. An audit trail that preserved the
+  // erased name would defeat the erasure (ADR-0020 §5).
+  CRM_CONTACT_MERGED: 'crm.contact.merged',
+  CRM_CONTACT_ERASED: 'crm.contact.erased',
+  CRM_CONTACTS_IMPORTED: 'crm.contacts.imported',
+  CRM_CUSTOM_FIELD_DEFINED: 'crm.custom_field.defined',
+  CRM_CUSTOM_FIELD_ARCHIVED: 'crm.custom_field.archived',
 } as const;
 
 export type AuditEventName = (typeof AUDIT_EVENTS)[keyof typeof AUDIT_EVENTS];

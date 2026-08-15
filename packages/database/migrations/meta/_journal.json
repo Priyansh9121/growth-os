@@ -29,6 +29,13 @@
       "when": 1786768495641,
       "tag": "0003_crm_row_level_security",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786773226600,
+      "tag": "0004_crm_data_lifecycle",
+      "breakpoints": true
     }
   ]
 }
