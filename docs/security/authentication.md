@@ -207,6 +207,25 @@ until the challenge is met; step-up re-authentication for high-risk actions
 
 ---
 
+## Invitations (Stage 2)
+
+The only way a second person gains access to a workspace.
+
+| Property                     | Choice                                                                                   | Why                                                                                    |
+| ---------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Token                        | 32 bytes, base64url                                                                      | Not guessable                                                                          |
+| At rest                      | `SHA-256(HMAC(token, SESSION_SECRET))`                                                   | Same construction as sessions — a read-only database leak yields no usable invitations |
+| Expiry                       | 7 days                                                                                   | Bounds the window if a link is forwarded or leaks from an inbox                        |
+| Single use                   | `accepted_at` claimed inside the accepting transaction, guarded by `accepted_at IS NULL` | Two simultaneous acceptances produce exactly one membership                            |
+| Role cap                     | **An inviter cannot grant a role stronger than their own**                               | Otherwise `members:invite` is a silent path to workspace ownership                     |
+| Lookup                       | Identical response for invalid, expired, revoked and used                                | Enumeration-safe                                                                       |
+| Accepting an existing member | Keeps the **stronger** role                                                              | Accepting an invite must never downgrade someone                                       |
+
+Delivery is behind an `InvitationNotifier` interface. The development
+implementation logs the acceptance URL; **production refuses to construct it**,
+because a silent no-op notifier means invitations that are created, never
+delivered, and never noticed.
+
 ## Testing
 
 | Property                                                                          | Where                    |

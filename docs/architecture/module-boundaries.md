@@ -13,6 +13,7 @@ packages/*  →  only the edges below.  NEVER apps/*.
    contracts  →  (nothing internal)
    database   →  contracts
    auth       →  contracts, database
+   crm        →  contracts, database        ← Stage 2. NEVER auth.
 ```
 
 Plus: no domain package (`contracts`, `database`, `auth`) may import React or
@@ -60,15 +61,23 @@ eight deliberately illegal imports, asserts lint **fails** on each, and cleans
 up. Run by `npm run verify:all` and in CI.
 
 ```
-✓ rejected: ui → database
-✓ rejected: ui → contracts
-✓ rejected: contracts → database
-✓ rejected: contracts → next
-✓ rejected: database → auth
-✓ rejected: auth → ui
-✓ rejected: auth → next
-✓ rejected: package escaping its directory with a relative path
+✓ rejected: ui → database              ✓ rejected: crm → auth (would cycle)
+✓ rejected: ui → contracts             ✓ rejected: crm → ui
+✓ rejected: contracts → database       ✓ rejected: crm → next
+✓ rejected: contracts → next           ✓ rejected: database → crm (inverted)
+✓ rejected: database → auth            ✓ rejected: auth → crm (inverted)
+✓ rejected: auth → ui                  ✓ rejected: ui → crm
+✓ rejected: auth → next                ✓ rejected: relative-path escape
+All 14 module boundaries are enforced.
 ```
+
+### The one sanctioned exception
+
+`packages/database/src/scripts/seed.ts` imports the CRM **dynamically**, to
+seed demo data through the real services rather than by raw insert. It is
+development-only tooling and creates no static dependency edge, so the packages
+remain independently loadable. The lint exemption is scoped to that one file,
+not to the scripts directory.
 
 ## Adding an edge
 

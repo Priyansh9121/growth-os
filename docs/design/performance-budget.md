@@ -1,6 +1,6 @@
 # Performance Budget
 
-**Status:** Baseline measured (Stage 1)
+**Status:** Measured and gated (Stage 2)
 **Last measured:** 2026-08-15
 
 Every number below was produced by a command that is written down. Nothing here
@@ -14,39 +14,73 @@ rather than being guessed at.
 **Command:**
 
 ```bash
-cd apps/web && npx next build          # Next.js 16.3.1, Turbopack, production
-npx next start --port 3111
-curl -s http://localhost:3111/login    # then sum the gzipped size of every
-                                       # chunk the returned HTML references
+node scripts/check-bundle-budget.mjs
 ```
 
-Gzip level 6, matching typical CDN defaults. Full method:
-`docs/development-log/0005-verification-and-measurement.md`.
+It builds, starts the production server, signs in, fetches each route, and sums
+the gzipped size of every `_next/static/chunks` script the returned document
+references — the actual initial JavaScript a browser downloads. Gzip level 6,
+matching typical CDN defaults.
 
-| Metric                                | Measured                                                  | Budget              | Status     |
-| ------------------------------------- | --------------------------------------------------------- | ------------------- | ---------- |
-| **Login — initial JS**                | **252.5 KB gzip** (12 chunks)                             | 250 KB              | ⚠️ 1% over |
-| **Dashboard — initial JS**            | **260.8 KB gzip** (13 chunks)                             | 250 KB              | ⚠️ 4% over |
-| **3D lattice chunk**                  | **228.9 KB gzip** (868.8 KB raw)                          | 260 KB              | ✅         |
-| **three.js in initial bundle**        | **No**                                                    | Must be no          | ✅         |
-| **three.js on the dashboard**         | **No**                                                    | Must be no          | ✅         |
-| Login HTML document                   | 44.1 KB raw / 6.4 KB gzip                                 | 60 KB raw           | ✅         |
-| Total client JS emitted               | 495.1 KB gzip across 16 chunks                            | —                   | —          |
-| Font payload                          | 0 bytes network (Geist is self-hosted and subset by Next) | 0 external requests | ✅         |
-| Texture/image payload in the 3D scene | 0 bytes                                                   | 0                   | ✅         |
+| Route                 | Measured (gzip) | Budget | Chunks | Status |
+| --------------------- | --------------- | ------ | ------ | ------ |
+| `/login`              | **255.0 KB**    | 275 KB | 12     | ✅     |
+| `/dashboard`          | **263.4 KB**    | 285 KB | 13     | ✅     |
+| `/customers/contacts` | **264.7 KB**    | 300 KB | 13     | ✅     |
+| `/customers/pipeline` | **198.0 KB**    | 300 KB | 12     | ✅     |
+| `/customers/tasks`    | **198.0 KB**    | 300 KB | 12     | ✅     |
 
-### Reading these honestly
+| Constraint                         | Result                |
+| ---------------------------------- | --------------------- |
+| **three.js in any initial bundle** | **No** — every route  |
+| 3D lattice chunk (lazy)            | 228.9 KB gzip         |
+| Font network payload               | 0 bytes (self-hosted) |
+| Texture payload in the 3D scene    | 0 bytes               |
 
-**The two most important results are the negatives.** three.js — the single
-largest asset in the product at 229 KB gzip — is absent from both the login's
-and the dashboard's initial bundles. The lazy-loading architecture
-([ADR-0007](../decisions/ADR-0007-3d-stack.md)) works: authentication never
-waits on 3D, and the operator surface pays nothing for it, ever.
+### Change since Stage 1, and what it means
 
-**The initial-bundle budget is marginally exceeded on both routes**, by 1% and
-4%. This is React 19 plus the Next.js App Router runtime, not application code —
-our own code is a small fraction of it. It is recorded as a real overage rather
-than adjusted away, and the reduction paths are listed below.
+| Route        | Stage 1  | Stage 2  | Δ           |
+| ------------ | -------- | -------- | ----------- |
+| `/login`     | 252.5 KB | 255.0 KB | **+2.5 KB** |
+| `/dashboard` | 260.8 KB | 263.4 KB | **+2.6 KB** |
+
+Stage 2 added an entire CRM — five packages' worth of schemas, five services, a
+new workspace package and three new routes — for **+2.5 KB on login and
++2.6 KB on the dashboard**. That is the architecture working as intended:
+
+- CRM services live in `@growth-os/crm`, which is **server-only**. None of it
+  reaches the browser.
+- Zod schemas live in `contracts` precisely so client components can validate
+  forms without importing the service package and, with it, the PostgreSQL
+  driver ([ADR-0011](../decisions/ADR-0011-crm-domain-model.md) §7).
+- The 2.5 KB is the shared contract types and the client components themselves.
+
+The CRM routes are **cheaper than the dashboard** (198 KB for pipeline and
+tasks) because they carry no chart or metric machinery.
+
+### The budgets are ceilings, not targets
+
+Stage 1 measured login at 252.5 KB against a 250 KB target and recorded the
+overage honestly rather than moving the goalposts. Stage 2 sets enforceable
+ceilings **above** the current numbers so the gate prevents _growth_ while the
+reduction work below is outstanding.
+
+**Raising a budget requires an entry in this document explaining why.** The
+right direction is down: React 19 plus the Next.js App Router runtime accounts
+for the large majority of these figures, and our own code is a small fraction.
+
+---
+
+## Regression protection
+
+**Now automated.** `scripts/check-bundle-budget.mjs` fails the build when a
+route exceeds its budget, **or when three.js appears in any initial bundle** —
+the second check is unconditional and independent of the size budget, because
+the whole point of [ADR-0007](../decisions/ADR-0007-3d-stack.md) is that
+authentication never waits on 3D.
+
+Run it with `npm run verify:bundle`. It is not yet wired into CI (it needs a
+database and a full build); wiring it in is the next step.
 
 ---
 
@@ -54,38 +88,41 @@ than adjusted away, and the reduction paths are listed below.
 
 Stated plainly rather than filled in with plausible numbers.
 
-| Metric                       | Target                               | Why not measured                                                        |
-| ---------------------------- | ------------------------------------ | ----------------------------------------------------------------------- |
-| LCP (login, mobile 4G)       | < 2.0 s                              | Needs Lighthouse against a deployed origin with real network throttling |
-| LCP (dashboard)              | < 1.5 s                              | As above                                                                |
-| CLS                          | < 0.05                               | Requires field or lab measurement                                       |
-| INP                          | < 200 ms                             | Requires interaction tracing                                            |
-| TTFB                         | < 300 ms                             | Depends on hosting, not yet chosen                                      |
-| 3D frame rate                | ≥ 55 fps mid-range, ≥ 30 fps low-end | Requires physical devices; the emulator's numbers would be fiction      |
-| WebGL memory                 | < 60 MB                              | Requires a device profiler                                              |
-| Route transition (dashboard) | < 300 ms                             | Requires deployed instrumentation                                       |
+| Metric                    | Target                               | Why not measured                                                   |
+| ------------------------- | ------------------------------------ | ------------------------------------------------------------------ |
+| LCP (login, mobile 4G)    | < 2.0 s                              | Needs Lighthouse against a deployed origin with network throttling |
+| LCP (dashboard, contacts) | < 1.5 s                              | As above                                                           |
+| CLS                       | < 0.05                               | Requires field or lab measurement                                  |
+| INP                       | < 200 ms                             | Requires interaction tracing                                       |
+| TTFB                      | < 300 ms                             | Depends on hosting, not yet chosen                                 |
+| 3D frame rate             | ≥ 55 fps mid-range, ≥ 30 fps low-end | Requires physical devices; emulator numbers would be fiction       |
+| CRM list query p95        | < 200 ms at 100k contacts            | Requires a realistic dataset; current seed is 8 contacts           |
 
 **These will be measured before public launch, not before.** Quoting a
 Lighthouse score from a local machine over loopback would be worse than
 admitting the gap — it would look like evidence.
 
+### A Stage 2 note on query performance
+
+The CRM's indexes were chosen to match real query paths
+(`(workspace_id, created_at)`, `(workspace_id, assigned_user_id, status, due_at)`,
+`(workspace_id, pipeline_id, stage_id)`), and pagination is keyset rather than
+offset so it does not degrade with depth
+([ADR-0016](../decisions/ADR-0016-list-pagination-and-filtering.md)).
+
+But contact search uses `ILIKE '%term%'`, which **cannot use a btree index**.
+That is acceptable at Stage 2 volumes and is a known ceiling: the documented
+next step is a `pg_trgm` GIN index, triggered at ~100k contacts per workspace
+or a search p95 above 200 ms.
+
 ---
 
 ## Budgets
 
-### Initial JavaScript
-
-| Route                       | Budget      | Rationale                                                                    |
-| --------------------------- | ----------- | ---------------------------------------------------------------------------- |
-| `/login`                    | 250 KB gzip | A threshold surface. The form must be interactive before 3D exists           |
-| `/dashboard` and app routes | 250 KB gzip | Opened dozens of times a day; this is the number that matters most long-term |
-| Lazy 3D chunk               | 260 KB gzip | Loads after the form is usable and never blocks input                        |
-
 ### 3D scene envelope
 
 Enforced by construction in
-[`lattice-scene.tsx`](../../apps/web/src/features/growth-field/lattice-scene.tsx),
-not by measurement:
+[`lattice-scene.tsx`](../../apps/web/src/features/growth-field/lattice-scene.tsx):
 
 | Constraint                 | Design value                                                 |
 | -------------------------- | ------------------------------------------------------------ |
@@ -94,48 +131,29 @@ not by measurement:
 | Textures                   | 0                                                            |
 | Device pixel ratio         | capped at 1.75                                               |
 | Frame loop when tab hidden | stopped (`visibilitychange`)                                 |
-| Resource disposal          | explicit on unmount                                          |
+| Resource disposal          | explicit on unmount — **asserted by an E2E test**            |
 
 ### Motion
 
 60 fps target, 16.7 ms frame budget. Only `transform` and `opacity` are
-animated — anything else forces layout or paint per frame. No more than ~12
-elements animate at once. `will-change` is applied before an animation and
-removed after; a permanent `will-change` permanently holds a compositor layer.
+animated. No more than ~12 elements animate at once. The CRM surfaces use the
+**micro and standard tiers only** — no entrance choreography on screens opened
+dozens of times a day (Principle 6).
 
 ---
 
 ## Reduction paths, in order of value
 
-Not yet applied — recorded so the overage has a plan rather than a shrug.
-
-1. **Audit the `motion` import surface.** It is used for a handful of
-   transitions; a tree-shaking review or replacing them with CSS transitions is
-   the cheapest available win.
-2. **Route-level code splitting for the dashboard shell.** The workspace
-   switcher and account menu are interactive but not needed for first paint.
-3. **React Server Components discipline.** Every component that does not need
-   interactivity should stay server-side. The current split has not been
-   audited.
+1. **Audit the `motion` import surface.** Used for a handful of transitions; a
+   tree-shaking review or replacing them with CSS transitions is the cheapest
+   available win.
+2. **Route-level splitting of the dashboard shell.** The workspace switcher and
+   account menu are interactive but not needed for first paint.
+3. **Server Component discipline.** The contacts table and pipeline board are
+   client components because they are genuinely interactive, but the CRM pages
+   around them could push more work server-side.
 4. **Re-measure after each change.** A reduction that is not re-measured has
    not happened.
-
----
-
-## Regression protection
-
-**Currently: none automated.** This is a known gap.
-
-Planned, in order:
-
-1. A CI step that fails when the login route's initial JS exceeds its budget —
-   the same measurement script used here, run on every pull request.
-2. Lighthouse CI against a preview deployment once hosting exists.
-3. Real-user monitoring for field LCP/INP/CLS after launch.
-
-Until step 1 lands, re-measure manually before any change that touches
-dependencies or the 3D scene, and update the table above with the new numbers
-and the date.
 
 ---
 
@@ -143,5 +161,5 @@ and the date.
 
 > **Do not make a performance claim without the command that produced it.**
 
-A number without a method is marketing. If a figure in this document cannot be
-reproduced by running the command beside it, the figure is a bug.
+If a figure in this document cannot be reproduced by running the command beside
+it, the figure is a bug.

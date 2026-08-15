@@ -2,7 +2,7 @@
 
 **Status:** Living document
 **Last reviewed:** 2026-08-15
-**Current stage:** Stage 1 (in progress)
+**Current stage:** Stage 2 (complete); Stage 3 next
 
 Stages are a _dependency order_, not a schedule. No dates are given here because
 none would be honest at this point. Each stage lists its objective,
@@ -48,7 +48,7 @@ every foundational choice without asking a person.
 
 ---
 
-## Stage 1 — Foundation, authentication & premium UI shell 🔨
+## Stage 1 — Foundation, authentication & premium UI shell ✅
 
 **Objective:** A secure, multi-tenant application skeleton with an
 exceptional first-run experience.
@@ -114,7 +114,8 @@ within one workspace and invisible to another.
 `crawl_pages`; robots.txt compliance; politeness/rate limiting; content and
 link extraction; scheduled recrawls.
 
-**Dependencies:** Stage 1.
+**Dependencies:** Stage 1 and 2. The crawler's output (leads) needs the CRM
+to write into, which now exists.
 
 **Risks:** **SSRF is the headline risk** — a crawler is a user-controlled
 outbound HTTP client. Mitigations are specified in

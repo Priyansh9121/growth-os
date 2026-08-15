@@ -76,6 +76,16 @@ revocation.
 and mobile IPs change legitimately, so binding causes false logouts without
 stopping an attacker who already holds the cookie.
 
+### T2b — Invitation privilege escalation (Stage 2) — **implemented**
+
+`workspace:members:invite` would be a silent path to workspace ownership if an
+admin could invite an owner. The granted role is capped at the inviter's own
+rank, and the refusal is covered by a negative test. Tokens are 32 bytes,
+stored only as `SHA-256(HMAC(token, secret))`, expire in 7 days, and are
+single-use — claimed inside the accepting transaction with an
+`accepted_at IS NULL` predicate, so a double-click cannot create two
+memberships.
+
 ### T3 — Credential brute force / stuffing
 
 **Mitigations:** Argon2id (19 MiB, t=2) makes offline cracking expensive.
@@ -124,10 +134,15 @@ never `error.message`. 403 never reveals whether a resource exists.
 anywhere; `X-Content-Type-Options: nosniff`; session cookie is `httpOnly` so
 even a successful XSS cannot exfiltrate it.
 
-**Known gap: no Content-Security-Policy yet.** Next.js injects inline bootstrap
-scripts, so a correct policy needs per-request nonces threaded through the edge
-proxy. A policy full of `'unsafe-inline'` would be worse than none because it
-looks like protection. **Stage 2 task.**
+**CLOSED IN STAGE 2:** a nonce-based Content-Security-Policy is now enforced on
+every page request. `script-src 'self' 'nonce-…' 'strict-dynamic'` — never
+`'unsafe-inline'`. See [ADR-0017](../decisions/ADR-0017-content-security-policy.md).
+
+One bounded relaxation: `style-src-attr 'unsafe-inline'`, because the entrance
+choreography and React Three Fiber set CSS custom properties via inline style
+_attributes_. It permits attributes only, not inline `<style>` elements, and an
+inline style attribute cannot execute JavaScript. Asserted by E2E tests that
+the header is present and that `script-src` contains no `'unsafe-inline'`.
 
 ### T9 — Clickjacking
 
@@ -210,6 +225,34 @@ one is a booking-fraud vector.
 Per-workspace queue quotas, job-level timeouts, poison-message handling with
 dead-letter queues, and idempotent handlers so a retry cannot double-charge or
 double-book.
+
+### T17a — IDOR against CRM records (Stage 2) — **implemented**
+
+The CRM introduces the first guessable-id endpoints (`/contacts/:id`,
+`/opportunities/:id`). Mitigation is structural rather than procedural: the CRM
+package exposes no loader that takes an id without a workspace, so the
+"fetch then check ownership" mistake cannot be written. 404 is returned for
+both absent and foreign records. Verified live and in E2E.
+
+### T17b — PII in events, logs and AI context (Stage 2) — **implemented**
+
+Three new fan-out surfaces appeared with the CRM, each handled:
+
+- **Domain events** carry identifiers and booleans only, never names or
+  contact details — an event reaches subscribers, queues and logs.
+- **Audit metadata** records field _names_, never old/new values. The activity
+  timeline holds the PII, under RLS, read-gated separately.
+- **AI tool output** is purpose-built and minimised: aggregates, first names
+  and ids. No tool returns an email address or phone number, because tool
+  output becomes model context sent to a third party.
+
+### T17c — Fabricated provenance (Stage 2) — **implemented**
+
+Unique to this product: a search keyword that was invented rather than reported
+would corrupt the exact number Growth OS is sold on, and be indistinguishable
+from a real one once stored. `search_query` requires `confidence = 'declared'`,
+enforced in contracts, again in the service, and by a database trigger that
+rejects any UPDATE touching a provenance column.
 
 ### T17 — Malicious or compromised agency operator (Stage 16)
 

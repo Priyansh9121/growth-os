@@ -1,6 +1,6 @@
 # Testing Strategy
 
-**Status:** Implemented (Stage 1) — 116 tests across 8 files.
+**Status:** Implemented — Stage 2 brought the suite to 210 unit + 36 integration + 11 component + 29 E2E.
 
 ## The principle
 
@@ -65,6 +65,15 @@ check** — it manufactures confidence.
   **fails**. It caught `eslint-plugin-boundaries` passing every violation.
 - `verify-gitignore.mjs` asserts no first-party source is hidden. It caught
   unanchored `coverage/` and `out/` rules before they hid anything.
+- `check-bundle-budget.mjs` measures what a browser actually downloads per
+  route, rather than trusting a build manifest.
+
+### What the E2E suite caught that nothing else could
+
+A stacking-context bug: the top bar's `z-30` ordered it only within its wrapper
+`<div>`, so page content painted over the account dropdown. Every unit and
+component test passed — jsdom has no layout. A real browser found it on the
+first run.
 
 ## Not yet built
 

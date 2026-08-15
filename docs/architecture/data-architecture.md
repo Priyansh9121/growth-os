@@ -1,6 +1,6 @@
 # Data Architecture
 
-**Status:** Stage 1 schema implemented. Future domains documented, **not built**.
+**Status:** Stage 1 + Stage 2 (CRM) implemented. Later domains documented, **not built**.
 **Governing ADRs:** [0003](../decisions/ADR-0003-database-and-orm.md), [0005](../decisions/ADR-0005-multi-tenancy-model.md)
 
 ## Principles
@@ -16,7 +16,45 @@
 6. **Provenance travels with data.** Every metric records where it came from,
    so the UI cannot present a fixture as a measurement.
 
-## Current schema (7 tables)
+## Current schema (16 tables)
+
+Stage 1 delivered 7 (identity + tenancy + audit). Stage 2 added 9 CRM tables,
+**all workspace-scoped with RLS enabled and forced**.
+
+### Stage 2 — CRM
+
+| Table             | Purpose                                                                            | Deletion         |
+| ----------------- | ---------------------------------------------------------------------------------- | ---------------- |
+| `contacts`        | Customer identity. Provenance never lives here                                     | soft delete      |
+| `companies`       | Organisations contacts belong to                                                   | soft delete      |
+| `acquisitions`    | **Provenance. Many per contact** — a repeat visit adds one rather than overwriting | none — immutable |
+| `pipelines`       | Workspace-owned sales process                                                      | archive          |
+| `pipeline_stages` | Ordered stages with a reporting `category`                                         | archive          |
+| `opportunities`   | Deals, with the acquisition that produced them                                     | close            |
+| `tasks`           | Work, human- or (later) agent-created                                              | cancel           |
+| `activities`      | Append-only business timeline                                                      | none             |
+| `invitations`     | Hashed, expiring, single-use tokens                                                | revoke           |
+
+Decisions worth knowing:
+
+- **Money is `bigint` minor units** plus an ISO-4217 currency. Never a float —
+  a rounding error in a pipeline total is customer-visible.
+- **`opportunities.acquisition_id` is the attribution join**, present from day
+  one so Stage 15 needs no migration of live data.
+- **`pipeline_id` / `stage_id` are `ON DELETE restrict`** — deleting a pipeline
+  must not silently destroy commercial history. They archive instead.
+- **Partial unique index** enforces one default pipeline per workspace;
+  partial indexes on `(workspace_id, email_normalised)` and `phone_e164` cover
+  live rows only, so an archived contact's address is immediately reusable and
+  duplicates remain _loadable_ (dedup reports, it never merges).
+- **Task relations are explicit nullable FKs**, not polymorphic — a
+  polymorphic reference cannot carry a foreign key.
+- **A trigger makes acquisition provenance immutable**; only qualification
+  fields may change.
+- `workspaces.default_phone_region` was added so E.164 normalisation never
+  assumes Australia.
+
+## Stage 1 schema (7 tables)
 
 ```
 users ──┬── sessions
