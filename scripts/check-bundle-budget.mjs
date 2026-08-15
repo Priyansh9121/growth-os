@@ -52,6 +52,14 @@ const BUDGETS = [
   { route: '/customers/contacts', budgetKb: 300, auth: true },
   { route: '/customers/pipeline', budgetKb: 300, auth: true },
   { route: '/customers/tasks', budgetKb: 300, auth: true },
+  // Stage 2.5. Companies is a plain server-rendered table and should stay the
+  // cheapest route in the product; if it ever approaches the others, something
+  // has been made a client component that did not need to be.
+  { route: '/customers/companies', budgetKb: 300, auth: true },
+  // The import wizard is genuinely stateful across four steps, so it carries
+  // real client code. Budgeted like the rest rather than exempted.
+  { route: '/customers/import', budgetKb: 300, auth: true },
+  { route: '/system/crm-fields', budgetKb: 300, auth: true },
 ];
 
 /** three.js must never appear in a route's INITIAL bundle. */
