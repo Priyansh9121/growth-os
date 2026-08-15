@@ -15,11 +15,21 @@
 
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { resolve } from 'node:path';
 
 export default defineConfig({
   test: {
     projects: [
       {
+        resolve: {
+          alias: {
+            // `server-only` is a build-time marker with no runtime behaviour,
+            // and is not resolvable outside the Next.js bundler. Without the
+            // alias, any test that imports a server module fails on the import
+            // rather than on what it is testing.
+            'server-only': resolve(import.meta.dirname, 'tests/setup/server-only-stub.ts'),
+          },
+        },
         test: {
           name: 'unit',
           environment: 'node',
