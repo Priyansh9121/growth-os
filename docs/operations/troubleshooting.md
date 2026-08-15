@@ -7,9 +7,13 @@ Symptoms actually encountered during Stage 1, with their real causes.
 ### `Invalid environment configuration: APP_URL must use https in production`
 
 **Not a bug — the validator working.** `npm run start` sets
-`NODE_ENV=production`, and production requires https because session cookies
-are `Secure`-only. For a local production build, use an https origin; otherwise
-run `npm run dev`.
+`NODE_ENV=production`, and production requires an https origin because session
+cookies are `Secure`-only.
+
+**Loopback is exempt**: `http://localhost` and `http://127.0.0.1` are accepted,
+because browsers treat them as secure contexts and a production build is
+routinely run locally (the E2E suite does exactly this). Any other http origin
+is rejected.
 
 ### `RATE_LIMIT_DRIVER=redis is not implemented yet`
 

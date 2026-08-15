@@ -35,8 +35,10 @@ attack surface, bundle weight, and a thing the next engineer must learn.
 ## Current dependencies
 
 **Runtime:** `next`, `react`, `react-dom`, `zod`, `drizzle-orm`, `postgres`,
-`@node-rs/argon2`, `three`, `@react-three/fiber`, `motion`, `geist`, `clsx`,
-`tailwind-merge`.
+`@node-rs/argon2`, `libphonenumber-js`, `three`, `@react-three/fiber`,
+`motion`, `geist`, `clsx`, `tailwind-merge`.
+
+Stage 2 added exactly one runtime dependency and removed none.
 
 Each is justified in an ADR or above. The riskiest is `drizzle-orm` — pre-1.0,
 so minor releases may break. Mitigated by pinning and by all usage being

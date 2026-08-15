@@ -127,6 +127,14 @@ fixture; the cost of under-matching is a leaked private key.
 **Anchored** after the `coverage/` incident above. `.nyc_output/` and
 `.playwright/` are dot-prefixed and safe unanchored.
 
+**Stage 2 note.** The E2E suite now produces `/test-results/` and
+`/playwright-report/` on every run. Both were already anchored in Stage 1, so
+no rule changed — and `verify-gitignore.mjs` confirms a future
+`packages/seo/src/crawl/results/` remains trackable. The probe list was
+extended with the CRM-shaped paths (`packages/crm/src/export/`, `/cache/`,
+`/coverage/`, `/temp/`) so the same class of mistake cannot recur as the CRM
+package grows.
+
 ## Category: local database state
 
 ```

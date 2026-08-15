@@ -15,13 +15,19 @@ from `apps/`. Enforced by ESLint and _verified_ by
 ```
                         apps/web
                             │  (may use any package)
-        ┌───────────────────┼───────────────────┐
-        ▼                   ▼                   ▼
-  @growth-os/ui     @growth-os/auth      @growth-os/contracts
-                            │                   ▲
-                            ▼                   │
-                   @growth-os/database ─────────┘
+     ┌──────────────┬────────┴───────┬──────────────────┐
+     ▼              ▼                ▼                  ▼
+@growth-os/ui  @growth-os/auth  @growth-os/crm   @growth-os/contracts
+                    │                │                  ▲
+                    └────────┬───────┘                  │
+                             ▼                          │
+                    @growth-os/database ────────────────┘
 ```
+
+`crm` and `auth` are siblings: **`crm` must not import `auth`**. That would
+cycle, and would couple the CRM to how authentication happened — which the
+voice service (Stage 13) will not share. Capability checks resolve through
+`contracts` instead.
 
 ---
 
@@ -149,6 +155,38 @@ isolation; `login.ts` composes every control in a deliberate order.
 
 **Testing:** exhaustive unit tests over the pure guards (mostly _negative_
 cases), plus integration tests for the full login path.
+
+---
+
+## `packages/crm/` — Stage 2
+
+**Purpose:** CRM application services — contacts, companies, acquisitions,
+pipelines, opportunities, tasks and the activity timeline.
+
+**Why separate:** the CRM is the destination every later capability writes
+into. The worker (Stage 3) and the voice service boundary (Stage 13) must call
+`createContact` without importing a Next.js application.
+
+**Contains:** `shared/` (CrmContext, capability guards, `loadInTenant`,
+pagination) · `identity/` (normalisation — the dedup matching keys) ·
+`contacts/` · `companies/` · `acquisitions/` (the provenance write path) ·
+`pipelines/` · `opportunities/` · `tasks/` · `activities/` · `events/`.
+
+**May depend on:** `@growth-os/contracts`, `@growth-os/database`,
+`drizzle-orm`, `libphonenumber-js`, `zod`.
+
+**Must NOT:** import `@growth-os/auth` (cycle), `@growth-os/ui`, React, Next.js
+or anything in `apps/`. Decide _who the caller is_ — it receives an
+already-authorized `TenantActor`.
+
+**Security boundary:** **the IDOR defence is an API shape here.** There is no
+`findById(id)`; the only loader is `loadInTenant`, which requires the
+workspace. Every service checks a capability, then runs inside a tenant-scoped
+transaction under RLS.
+
+**Testing:** unit tests for pure logic; tenant isolation across all eight CRM
+tables is tested in `@growth-os/database`'s integration suite as a restricted
+non-owner role.
 
 ---
 

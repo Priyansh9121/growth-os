@@ -41,6 +41,7 @@ How the system is shaped and why those boundaries exist.
 - [system-context.md](architecture/system-context.md) — external actors and systems
 - [module-boundaries.md](architecture/module-boundaries.md) — the dependency rules, and how they are enforced
 - [multi-tenancy.md](architecture/multi-tenancy.md) — platform → agency → workspace
+- [crm-architecture.md](architecture/crm-architecture.md) — the CRM spine, provenance, IDOR defence
 - [data-architecture.md](architecture/data-architecture.md) — current schema and the planned domain model
 - [event-architecture.md](architecture/event-architecture.md) — the future event backbone
 - [ai-agent-architecture.md](architecture/ai-agent-architecture.md) — agents, tools, autonomy levels

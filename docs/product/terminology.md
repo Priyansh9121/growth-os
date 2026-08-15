@@ -60,12 +60,14 @@ table, a type, a route or a UI label.
 
 ## Attribution
 
-| Term                   | Definition                                                                                      |
-| ---------------------- | ----------------------------------------------------------------------------------------------- |
-| **Touchpoint**         | A recorded interaction between a visitor/contact and the business, with source.                 |
-| **Attribution model**  | The rule assigning credit across touchpoints (first, last, linear, position-based).             |
-| **Attributed revenue** | Revenue assigned to a source **under a named model**. Never presented without naming the model. |
-| **Identity stitching** | Linking anonymous sessions to an identified contact once known.                                 |
+| Term                      | Definition                                                                                                                           |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Touchpoint**            | A recorded interaction between a visitor/contact and the business, with source.                                                      |
+| **Attribution model**     | The rule assigning credit across touchpoints (first, last, linear, position-based).                                                  |
+| **Attributed revenue**    | Revenue assigned to a source **under a named model**. Never presented without naming the model.                                      |
+| **Pipeline value**        | The estimated value of OPEN opportunities. **Not revenue.** Always labelled as such — no revenue exists in Growth OS until Stage 15. |
+| **Provenance confidence** | How much an acquisition's source data can be trusted: `declared` · `derived` · `inferred` · `manual`. Required on every acquisition. |
+| **Identity stitching**    | Linking anonymous sessions to an identified contact once known.                                                                      |
 
 > **Rule:** attributed revenue is always rendered with its model. "Attributed
 > revenue: $14,820" is incomplete; "Attributed revenue (last non-direct):

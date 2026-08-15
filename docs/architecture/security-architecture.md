@@ -42,9 +42,16 @@
 
 Recorded so absence reads as a decision, not an oversight:
 
-- **No CSP.** Next.js injects inline scripts; a correct policy needs nonces
-  threaded through the edge proxy. A policy full of `'unsafe-inline'` would be
-  worse than none, because it looks like protection.
+- **`style-src-attr 'unsafe-inline'`.** A bounded relaxation for inline style
+  _attributes_ (the entrance choreography and R3F's canvas sizing). It permits
+  attributes only, not inline `<style>` elements, and an inline style attribute
+  cannot execute JavaScript. **`script-src` is not weakened** — full analysis in
+  [ADR-0017](../decisions/ADR-0017-content-security-policy.md).
+- **No public registration.** Deliberate, not an oversight: an unauthenticated
+  tenant-creation endpoint needs email verification, bot defence and
+  tenant-level rate limiting to be safe ([ADR-0018](../decisions/ADR-0018-invitations-and-registration.md)).
+- **GDPR erasure is not implemented.** Soft delete is a product feature, not
+  erasure. Named prerequisite before the first real customer.
 - **No distributed rate limiting.** Correct at one instance; a named **release
   gate** before scaling ([ADR-0009](../decisions/ADR-0009-rate-limiting.md)).
 - **Sessions are not bound to IP or User-Agent.** Both are spoofable and mobile
@@ -54,11 +61,15 @@ Recorded so absence reads as a decision, not an oversight:
 
 ## Assurance
 
-Automated: 116 tests, most of the security ones asserting denials; contrast
-checked in CI; two meta-verifiers that test the checks themselves.
+Automated: the full suite (counts in the Stage 2 report), most security tests
+asserting **denials**; contrast checked in CI; three meta-verifiers that test
+the checks themselves; and a browser E2E suite that asserts the CSP header,
+nonce uniqueness, absence of `'unsafe-inline'` in `script-src`, and zero CSP
+violations at runtime.
 
-Manual: the Stage 1 flows were exercised live and recorded in
-[development-log/0005](../development-log/0005-verification-and-measurement.md).
+Manual: flows exercised live and recorded in
+[development-log/0005](../development-log/0005-verification-and-measurement.md)
+and [0008](../development-log/0008-stage-2-security-and-verification.md).
 
 Not yet: external penetration test, dependency scanning beyond `npm audit`,
 SAST. All required before public launch.

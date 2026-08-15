@@ -154,6 +154,27 @@ is the worst possible failure mode for a security test.
 
 ---
 
+## The IDOR defence, as an API shape
+
+Layer 1 stops an unauthorized _workspace_. A separate mistake is resolving a
+record id without scoping it at all:
+
+```ts
+const contact = await findById(id); // loads ANY tenant's row
+if (contact.workspaceId !== actor.workspaceId)
+  // too late — already read
+  throw new Error();
+```
+
+`@growth-os/crm` makes that **unexpressible**: there is no `findById`. The only
+loader is `loadInTenant(tx, table, workspace, id)`, which puts the workspace in
+the query. It raises `NotFoundError`, never `AuthorizationError`, so a 404 is
+returned whether the record is absent or belongs to another tenant —
+distinguishing them would confirm another tenant holds that id.
+
+Verified live: a user requesting another workspace's contact id receives 404,
+while its owner receives 200.
+
 ## Checklist for every new tenant table
 
 Required before merge. There is no exception for "internal" tables.

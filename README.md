@@ -4,10 +4,12 @@
 capture, CRM, AI agents and revenue attribution into one measurable loop — so a
 business can see which acquisition work produced revenue, not just rankings.
 
-> **Status: Stage 1 of 23 — foundation.** Authentication, multi-tenancy, the
-> design system, the login experience and the application shell are built and
-> tested. **No SEO, CRM, voice, automation or attribution capability exists
-> yet.** The dashboard renders clearly-labelled development fixtures.
+> **Status: Stage 2 of 23 — CRM foundation.** On top of the Stage 1 foundation
+> (auth, multi-tenancy, design system, flagship login), Growth OS now has a
+> **tenant-safe, provenance-aware CRM**: contacts, acquisitions, pipelines,
+> opportunities, tasks and an append-only activity timeline.
+> **No SEO, voice, automation or revenue attribution exists yet.** Dashboard
+> metrics are now a labelled mix of live CRM counts and remaining fixtures.
 > See [docs/product/product-roadmap.md](docs/product/product-roadmap.md).
 
 ---
@@ -74,7 +76,8 @@ apps/web (Next.js)          ⬜ apps/api  ⬜ apps/worker  ⬜ apps/voice
 apps/web/              Next.js app: UI, route handlers, the only runtime host
 packages/contracts/    Types, Zod schemas, typed errors, the AI tool contract
 packages/database/     Drizzle schema, migrations, tenant transactions, seed
-packages/auth/         Passwords, sessions, tenancy authorization, login
+packages/auth/         Passwords, sessions, tenancy authorization, invitations
+packages/crm/          CRM services: contacts, provenance, pipelines, timeline
 packages/ui/           Design tokens and accessible React primitives
 docs/                  Product, architecture, ADRs, design, security, ops
 scripts/               Repository safety verifiers
@@ -139,9 +142,19 @@ treated as non-negotiable and are tested as **negatives** — we assert that
 access is denied, because a passing happy path proves nothing about isolation.
 
 - **Tenant isolation at three independent layers**: application guards, scoped
-  transactions, and PostgreSQL row-level security. A forgotten
-  `WHERE workspace_id` returns zero rows rather than another tenant's data.
+  transactions, and PostgreSQL row-level security — on **all ten** tenant
+  tables, enabled _and_ forced. A forgotten `WHERE workspace_id` returns zero
+  rows rather than another tenant's data.
   [docs/security/tenant-isolation.md](docs/security/tenant-isolation.md)
+- **IDOR defence as an API shape**: `@growth-os/crm` exposes no `findById`. The
+  only loader requires a workspace, so "fetch then check ownership" cannot be
+  written. Foreign records return 404, never 403.
+- **Nonce-based CSP** with `strict-dynamic`. `script-src` contains no
+  `'unsafe-inline'` — asserted by an E2E test.
+  [docs/decisions/ADR-0017-content-security-policy.md](docs/decisions/ADR-0017-content-security-policy.md)
+- **Provenance cannot be fabricated**: a search keyword requires `declared`
+  confidence, enforced in contracts, in the service, and by a PostgreSQL
+  trigger that rejects any rewrite of a lead's source.
 - **Authentication**: Argon2id (OWASP 2024 parameters), 256-bit opaque session
   tokens stored only as `SHA-256(HMAC(token, secret))`, httpOnly/SameSite=Lax
   cookies, session fixation defence, sliding + absolute expiry.
@@ -167,8 +180,8 @@ Documentation is written as decisions are made, not retrofitted. Start at
 [docs/README.md](docs/README.md).
 
 - **Product** — [vision](docs/product/vision.md) · [principles](docs/product/product-principles.md) · [roadmap](docs/product/product-roadmap.md) · [terminology](docs/product/terminology.md)
-- **Architecture** — [overview](docs/architecture/overview.md) · [multi-tenancy](docs/architecture/multi-tenancy.md) · [AI agents](docs/architecture/ai-agent-architecture.md)
-- **Decisions** — [10 ADRs](docs/decisions/) with rejected alternatives and costs
+- **Architecture** — [overview](docs/architecture/overview.md) · [multi-tenancy](docs/architecture/multi-tenancy.md) · [**CRM**](docs/architecture/crm-architecture.md) · [AI agents](docs/architecture/ai-agent-architecture.md)
+- **Decisions** — [18 ADRs](docs/decisions/) with rejected alternatives and costs
 - **Design** — [design system](docs/design/design-system.md) · [motion](docs/design/motion-system.md) · [3D](docs/design/3d-system.md) · [login](docs/design/login-experience.md)
 - **Development log** — [how we got here](docs/development-log/)
 
@@ -180,10 +193,15 @@ Documentation is written as decisions are made, not retrofitted. Start at
    the service validates, the database confirms.
 3. **No `users.workspace_id`.** Access is via memberships, always.
 4. **Every tenant table gets `workspace_id`, an index and an RLS policy.**
-5. **Validate at every trust boundary** with Zod — including AI tool arguments.
-6. **Document the decision, not just the code.** New architectural choices get
+   Checklist: [docs/security/tenant-isolation.md](docs/security/tenant-isolation.md).
+5. **Never fabricate provenance.** `search_query` requires `declared`
+   confidence. An invented keyword corrupts the number the product is sold on.
+6. **A function that may run inside a transaction must accept one.** Opening a
+   nested transaction takes a second pooled connection and can deadlock.
+7. **Validate at every trust boundary** with Zod — including AI tool arguments.
+8. **Document the decision, not just the code.** New architectural choices get
    an ADR; meaningful sessions get a development-log entry.
-7. **Run `npm run verify:all` before committing.**
+9. **Run `npm run verify:all` before committing.**
 
 ## Licence
 
