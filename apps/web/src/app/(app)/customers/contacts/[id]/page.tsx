@@ -11,19 +11,27 @@
  */
 
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import Link from 'next/link';
-import { isAppError } from '@growth-os/contracts';
+import { isAppError, workspaceRoleHasCapability } from '@growth-os/contracts';
 import {
   getContact,
   listAcquisitionsForContact,
   listActivities,
+  listContactTags,
+  listCustomFieldValues,
+  listCustomFields,
   listOpportunities,
+  listTags,
+  resolveMergeRedirect,
 } from '@growth-os/crm';
 import { Badge, Surface } from '@growth-os/ui';
 import { requireAuthContext } from '../../../../../server/auth-context';
 import { buildServerCrmContext } from '../../../../../server/crm-server';
 import { ActivityTimeline } from '../../../../../components/crm/activity-timeline';
+import { ContactCustomFields } from '../../../../../components/crm/contact-custom-fields';
+import { ContactTags } from '../../../../../components/crm/contact-tags';
+import { EraseContact } from '../../../../../components/crm/erase-contact';
 import { SourceSummary } from '../../../../../components/crm/source-badge';
 import { WorkspaceRequired } from '../../../../../components/crm/workspace-required';
 
@@ -59,6 +67,12 @@ export default async function ContactDetailPage({ params }: Params) {
 
   const crm = buildServerCrmContext(actor, workspace);
 
+  // A merged contact is a REDIRECT, not a 404 (ADR-0019 §2). The id was valid
+  // and the record still exists, so a bookmarked link or an external system's
+  // stored id resolves to the survivor instead of breaking.
+  const redirect = await resolveMergeRedirect(crm, id);
+  if (redirect) permanentRedirect(`/customers/contacts/${redirect.mergedInto}`);
+
   // A NotFoundError here means "not in YOUR workspace" — rendered as a plain
   // 404 so the response is identical whether the record exists elsewhere or
   // not at all.
@@ -70,13 +84,23 @@ export default async function ContactDetailPage({ params }: Params) {
     throw error;
   }
 
-  const [timeline, acquisitions, deals] = await Promise.all([
-    listActivities(crm, { contactId: id, limit: 25 }),
-    listAcquisitionsForContact(crm, id),
-    listOpportunities(crm, { limit: 25 }),
-  ]);
+  const [timeline, acquisitions, deals, appliedTags, allTags, fieldDefinitions, fieldValues] =
+    await Promise.all([
+      listActivities(crm, { contactId: id, limit: 25 }),
+      listAcquisitionsForContact(crm, id),
+      listOpportunities(crm, { limit: 25 }),
+      listContactTags(crm, id),
+      listTags(crm),
+      listCustomFields(crm),
+      listCustomFieldValues(crm, id),
+    ]);
 
   const contactDeals = deals.items.filter((deal) => deal.contactId === id);
+
+  const can = (capability: Parameters<typeof workspaceRoleHasCapability>[1]): boolean =>
+    workspaceRoleHasCapability(workspace.role, capability);
+
+  const erased = contact.firstName === 'Erased' && contact.email === null;
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -97,10 +121,28 @@ export default async function ContactDetailPage({ params }: Params) {
               <p className="mt-1 text-body text-text-muted">{contact.companyName}</p>
             ) : null}
           </div>
-          {contact.openOpportunityCount > 0 ? (
-            <Badge tone="signal">{contact.openOpportunityCount} open</Badge>
-          ) : null}
+          <div className="flex items-center gap-2">
+            {erased ? <Badge tone="neutral">Details erased</Badge> : null}
+            {contact.openOpportunityCount > 0 ? (
+              <Badge tone="signal">{contact.openOpportunityCount} open</Badge>
+            ) : null}
+            {can('workspace:crm:contacts:merge') && !erased ? (
+              <Link
+                href={`/customers/contacts/${id}/merge`}
+                className="inline-flex h-8 items-center rounded-md border border-line px-3 text-caption text-text-muted transition-colors duration-[120ms] hover:border-line-strong hover:text-text focus-visible:outline-none"
+              >
+                Merge a duplicate
+              </Link>
+            ) : null}
+          </div>
         </div>
+
+        <ContactTags
+          contactId={id}
+          initialTags={appliedTags}
+          available={allTags}
+          canApply={can('workspace:crm:tags:apply') && !erased}
+        />
 
         <Surface level={1} className="grid grid-cols-1 gap-x-8 gap-y-4 p-5 sm:grid-cols-2">
           <Detail label="Email">
@@ -209,6 +251,22 @@ export default async function ContactDetailPage({ params }: Params) {
         </section>
       ) : null}
 
+      {fieldDefinitions.length > 0 ? (
+        <section aria-labelledby="fields-heading" className="flex flex-col gap-3">
+          <h2 id="fields-heading" className="text-overline text-text-subtle uppercase">
+            Details for this workspace
+          </h2>
+          <Surface level={1} className="p-5">
+            <ContactCustomFields
+              contactId={id}
+              definitions={fieldDefinitions}
+              initialValues={fieldValues}
+              canEdit={can('workspace:crm:contacts:write') && !erased}
+            />
+          </Surface>
+        </section>
+      ) : null}
+
       <section aria-labelledby="timeline-heading" className="flex flex-col gap-3">
         <h2 id="timeline-heading" className="text-overline text-text-subtle uppercase">
           Timeline
@@ -217,6 +275,17 @@ export default async function ContactDetailPage({ params }: Params) {
           <ActivityTimeline activities={timeline.items} />
         </Surface>
       </section>
+
+      {/* Last on the page, and visually separated. An irreversible action does
+          not belong beside the controls used dozens of times a day. */}
+      {can('workspace:crm:contacts:erase') && !erased ? (
+        <section aria-labelledby="privacy-heading" className="mt-4 flex flex-col gap-3">
+          <h2 id="privacy-heading" className="text-overline text-text-subtle uppercase">
+            Privacy
+          </h2>
+          <EraseContact contactId={id} displayName={contact.displayName} />
+        </section>
+      ) : null}
     </div>
   );
 }

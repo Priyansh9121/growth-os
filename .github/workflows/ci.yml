@@ -171,3 +171,60 @@ jobs:
           DATABASE_URL: postgresql://build:build@localhost:5432/build
           SESSION_SECRET: ci-build-placeholder-secret-not-used-at-runtime
         run: npm run build
+
+  bundle:
+    name: Bundle budget
+    runs-on: ubuntu-latest
+
+    # A REGRESSION GATE, not a report.
+    #
+    # Stage 2 measured the bundles honestly and wrote the numbers down, but
+    # nothing stopped the next commit from doubling them — a budget that is
+    # only checked when someone remembers is not a budget. This job fails the
+    # build when a route exceeds its ceiling, or when three.js appears in ANY
+    # route's initial bundle. The second check is unconditional and independent
+    # of size: the whole point of ADR-0007 is that authentication never waits
+    # on the 3D scene.
+    #
+    # It needs a database because it signs in and fetches authenticated routes
+    # — measuring the login page alone would miss every screen the product is
+    # actually used on.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: growth_os_owner
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: growth_os_bundle
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U growth_os_owner"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+
+      - name: Prepare the database
+        env:
+          DATABASE_URL: postgresql://growth_os_owner:ci_only_password@localhost:5432/growth_os_bundle
+          SEED_PASSWORD: BundleCheck!Only
+        run: |
+          npm run db:migrate
+          npm run db:seed
+
+      - name: Check bundle budgets
+        # APP_URL, PORT and SESSION_SECRET are set by the script itself, which
+        # owns the server it measures. Only the database and the seed password
+        # come from here.
+        env:
+          DATABASE_URL: postgresql://growth_os_owner:ci_only_password@localhost:5432/growth_os_bundle
+          SEED_PASSWORD: BundleCheck!Only
+        run: npm run verify:bundle
