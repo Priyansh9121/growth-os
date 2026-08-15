@@ -89,7 +89,15 @@ export function AppShell({ user, children }: AppShellProps) {
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className={topbarStep?.className} style={topbarStep?.style}>
+        {/*
+          `relative z-30` on the WRAPPER, not just the header.
+          The header's own z-index orders it within this div; without a
+          z-index here, the wrapper sits at `auto` and `main` — later in the
+          DOM — paints above it, so the account dropdown and workspace
+          switcher were covered by page content. Caught by an E2E sign-out
+          test whose click was intercepted.
+        */}
+        <div className={`relative z-30 ${topbarStep?.className ?? ''}`} style={topbarStep?.style}>
           <TopBar user={user} />
         </div>
 

@@ -36,8 +36,10 @@
     "db:reset": "npm run db:reset --workspace @growth-os/database",
     "db:studio": "npm run db:studio --workspace @growth-os/database",
     "verify:gitignore": "node scripts/verify-gitignore.mjs",
-    "verify:all": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run verify:boundaries && npm run verify:gitignore",
-    "verify:boundaries": "node scripts/verify-boundaries.mjs"
+    "verify:all": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run verify:boundaries && npm run verify:gitignore",
+    "verify:boundaries": "node scripts/verify-boundaries.mjs",
+    "e2e:ui": "playwright test --ui",
+    "verify:bundle": "node scripts/check-bundle-budget.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

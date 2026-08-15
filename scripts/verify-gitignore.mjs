@@ -121,6 +121,14 @@ const PROBES = [
   'packages/config/src/env.config.ts',
   // Voice service source under a name that collides with model weights.
   'apps/voice/src/models/turn-detector.ts',
+  // Stage 2: CRM-shaped paths. `export/` and `cache/` are plausible modules in
+  // a package that will grow import/export and query caching.
+  'packages/crm/src/export/csv.ts',
+  'packages/crm/src/cache/contact-cache.ts',
+  'packages/crm/src/coverage/pipeline-coverage.ts',
+  'packages/crm/src/temp/migration-helper.ts',
+  'packages/crm/src/logs/activity-log.ts',
+  'packages/crm/src/dist/bundled.ts',
 ];
 
 for (const probe of PROBES) {
