@@ -15,6 +15,20 @@
       "when": 1786763048776,
       "tag": "0001_tenant_row_level_security",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786768466918,
+      "tag": "0002_crm_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786768495641,
+      "tag": "0003_crm_row_level_security",
+      "breakpoints": true
     }
   ]
 }

@@ -70,6 +70,16 @@ export const workspaces = pgTable(
      */
     timezone: text('timezone').notNull().default('UTC'),
 
+    /**
+     * ISO 3166-1 alpha-2 region used to parse local phone numbers into E.164.
+     *
+     * `0412 345 678` is a valid mobile in Australia and a valid landline in
+     * several other countries. A global constant would silently corrupt the
+     * matching key for every non-Australian workspace, and the corruption
+     * would only be discovered after data existed (ADR-0015).
+     */
+    defaultPhoneRegion: text('default_phone_region').notNull().default('AU'),
+
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

@@ -43,6 +43,18 @@ export const AUDIT_EVENTS = {
   TENANCY_ACCESS_DENIED: 'tenancy.access.denied',
   TENANCY_WORKSPACE_SWITCHED: 'tenancy.workspace.switched',
   AI_QUERY_SUBMITTED: 'ai.query.submitted',
+
+  // CRM (Stage 2). These are the SECURITY record of data changes — distinct
+  // from the CRM activity timeline, which is the business record and contains
+  // PII. One user action commonly writes both (ADR-0014).
+  CRM_CONTACT_CREATED: 'crm.contact.created',
+  CRM_CONTACT_UPDATED: 'crm.contact.updated',
+  CRM_CONTACT_ARCHIVED: 'crm.contact.archived',
+  CRM_OPPORTUNITY_CREATED: 'crm.opportunity.created',
+  CRM_OPPORTUNITY_STAGE_CHANGED: 'crm.opportunity.stage_changed',
+  CRM_INVITATION_CREATED: 'crm.invitation.created',
+  CRM_INVITATION_ACCEPTED: 'crm.invitation.accepted',
+  CRM_INVITATION_REVOKED: 'crm.invitation.revoked',
 } as const;
 
 export type AuditEventName = (typeof AUDIT_EVENTS)[keyof typeof AUDIT_EVENTS];
