@@ -1,0 +1,23 @@
+{
+  "name": "@growth-os/auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Password hashing, session lifecycle, tenancy authorization and login/logout use cases. Framework-agnostic.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./authorization": "./src/authorization/index.ts",
+    "./session": "./src/session/index.ts",
+    "./http": "./src/http/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@growth-os/contracts": "*",
+    "@growth-os/database": "*",
+    "@node-rs/argon2": "^2.1.0",
+    "drizzle-orm": "^0.45.2",
+    "zod": "^4.4.3"
+  }
+}
