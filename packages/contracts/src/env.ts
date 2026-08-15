@@ -21,6 +21,31 @@
 
 import { z } from 'zod';
 
+/**
+ * Is this origin one the browser treats as a secure context?
+ *
+ * https always is. So is loopback: browsers grant `http://localhost` and
+ * `http://127.0.0.1` secure-context status, and `Secure` cookies work there.
+ *
+ * The carve-out exists because a production BUILD is routinely run locally —
+ * by the E2E suite, and by anyone verifying production behaviour before
+ * deploying. Rejecting loopback would force those runs onto the development
+ * server, which has materially different CSP requirements, so we would be
+ * testing a configuration that never ships.
+ *
+ * A real deployment cannot exploit this: `http://127.0.0.1` is not reachable
+ * by a customer.
+ */
+function isSecureOrigin(url: string): boolean {
+  if (url.startsWith('https://')) return true;
+  try {
+    const { hostname, protocol } = new URL(url);
+    return protocol === 'http:' && (hostname === 'localhost' || hostname === '127.0.0.1');
+  } catch {
+    return false;
+  }
+}
+
 /** The placeholder shipped in `.env.example`. Must never reach production. */
 const PLACEHOLDER_SESSION_SECRET = 'replace-me-with-32-bytes-of-base64-entropy';
 
@@ -78,8 +103,10 @@ const envSchema = baseEnvSchema
       path: ['SESSION_SECRET'],
     },
   )
-  .refine((env) => env.NODE_ENV !== 'production' || env.APP_URL.startsWith('https://'), {
-    message: 'APP_URL must use https in production (session cookies are Secure-only).',
+  .refine((env) => env.NODE_ENV !== 'production' || isSecureOrigin(env.APP_URL), {
+    message:
+      'APP_URL must use https in production (session cookies are Secure-only). ' +
+      'http is permitted only for loopback hosts.',
     path: ['APP_URL'],
   })
   .refine((env) => env.RATE_LIMIT_DRIVER !== 'redis', {

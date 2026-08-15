@@ -1,5 +1,17 @@
 import Link from 'next/link';
 
+/**
+ * Dynamic, deliberately.
+ *
+ * Nonce-based CSP requires dynamic rendering: Next.js cannot inject a nonce
+ * into a page generated at build time, and under `'strict-dynamic'` a static
+ * page's unnonced scripts are blocked. Every other route is already dynamic
+ * because it depends on the session cookie; this one has to say so explicitly.
+ *
+ * @see docs/decisions/ADR-0017-content-security-policy.md
+ */
+export const dynamic = 'force-dynamic';
+
 /** 404. Deliberately plain — an error page is not a place for personality. */
 export default function NotFound() {
   return (
