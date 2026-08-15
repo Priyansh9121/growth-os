@@ -103,6 +103,31 @@ export class ConsolePasswordResetNotifier implements PasswordResetNotifier {
   }
 }
 
+/**
+ * Production stand-in for an unconfigured provider.
+ *
+ * WHY THIS EXISTS RATHER THAN REFUSING TO BOOT
+ * The first version of this made the composition root throw when `NODE_ENV` was
+ * production and no provider was wired. That was disproportionate and, in
+ * practice, wrong: it bricked the entire application — CRM, dashboard, sign-in
+ * — because ONE optional delivery channel was unconfigured. The E2E suite,
+ * which runs against a production build, could not start the server at all.
+ *
+ * The failure it was guarding against is real: a reset that is requested,
+ * never delivered, and never noticed. But the fix is to fail LOUDLY AT THE
+ * POINT OF USE, not to take the product down. A reset attempt then produces a
+ * visible error for the person who asked, a stack trace in the log, and an
+ * audit record — all three of which someone notices — while everything
+ * unrelated keeps working.
+ */
+export class UnconfiguredPasswordResetNotifier implements PasswordResetNotifier {
+  async send(): Promise<void> {
+    throw new Error(
+      'Password reset delivery is not configured. Wire a transactional email provider before offering password reset in production.',
+    );
+  }
+}
+
 export interface PasswordResetDependencies {
   readonly db: Database;
   readonly rateLimiter: RateLimiter;
