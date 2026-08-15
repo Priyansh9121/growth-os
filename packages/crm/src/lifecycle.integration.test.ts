@@ -579,11 +579,39 @@ describeIntegration('CRM lifecycle services', () => {
       expect(validation.totalRows).toBe(2);
       expect(validation.validRows).toBe(1);
       expect(validation.issues).toHaveLength(1);
+      // Reported BY NUMBER, so the operator can find it in their own file.
+      // "Some rows failed" is not actionable on a 3,000-row spreadsheet.
       expect(validation.issues[0]?.row).toBe(2);
-      // The message names the field and the rule, never the offending value.
-      expect(validation.issues[0]?.message).not.toMatch(/nameless/i);
 
       expect(await harness.owner.select().from(contacts)).toHaveLength(0);
+    });
+
+    it('never echoes the offending value back in an issue message', async () => {
+      // The row's own data is what makes it invalid, so the message is the one
+      // place a rejected value could leak — into an API response, a browser, a
+      // screenshot, and whatever log sits in between.
+      //
+      // The offending value here is DISTINCTIVE on purpose. Asserting against a
+      // value that is not the one being rejected would pass regardless.
+      const validation = await validateImport(contextFor('owner'), {
+        filename: 'contacts.csv',
+        mapping,
+        rows: [
+          {
+            'First name': 'Priya',
+            Email: 'sarah-mitchell-0412987654-not-an-address',
+            Source: '',
+          },
+        ],
+      });
+
+      expect(validation.issues).toHaveLength(1);
+      const message = validation.issues[0]?.message ?? '';
+
+      expect(message).not.toContain('sarah-mitchell');
+      expect(message).not.toContain('0412987654');
+      // It still has to be useful: the field and the rule are named.
+      expect(message).toMatch(/email/i);
     });
 
     it('records provenance it can honestly claim', async () => {

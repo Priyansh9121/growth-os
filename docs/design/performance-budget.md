@@ -1,6 +1,6 @@
 # Performance Budget
 
-**Status:** Measured and gated (Stage 2)
+**Status:** Measured and gated in CI (Stage 2.5)
 **Last measured:** 2026-08-15
 
 Every number below was produced by a command that is written down. Nothing here
@@ -22,13 +22,16 @@ the gzipped size of every `_next/static/chunks` script the returned document
 references — the actual initial JavaScript a browser downloads. Gzip level 6,
 matching typical CDN defaults.
 
-| Route                 | Measured (gzip) | Budget | Chunks | Status |
-| --------------------- | --------------- | ------ | ------ | ------ |
-| `/login`              | **255.0 KB**    | 275 KB | 12     | ✅     |
-| `/dashboard`          | **263.4 KB**    | 285 KB | 13     | ✅     |
-| `/customers/contacts` | **264.7 KB**    | 300 KB | 13     | ✅     |
-| `/customers/pipeline` | **198.0 KB**    | 300 KB | 12     | ✅     |
-| `/customers/tasks`    | **198.0 KB**    | 300 KB | 12     | ✅     |
+| Route                  | Measured (gzip) | Budget | Chunks | Status |
+| ---------------------- | --------------- | ------ | ------ | ------ |
+| `/login`               | **259.3 KB**    | 275 KB | 12     | ✅     |
+| `/dashboard`           | **264.5 KB**    | 285 KB | 13     | ✅     |
+| `/customers/contacts`  | **265.8 KB**    | 300 KB | 13     | ✅     |
+| `/customers/pipeline`  | **198.1 KB**    | 300 KB | 12     | ✅     |
+| `/customers/tasks`     | **198.1 KB**    | 300 KB | 12     | ✅     |
+| `/customers/companies` | **192.6 KB**    | 300 KB | 10     | ✅     |
+| `/customers/import`    | **266.1 KB**    | 300 KB | 13     | ✅     |
+| `/system/crm-fields`   | **265.0 KB**    | 300 KB | 13     | ✅     |
 
 | Constraint                         | Result                |
 | ---------------------------------- | --------------------- |
@@ -36,6 +39,27 @@ matching typical CDN defaults.
 | 3D lattice chunk (lazy)            | 228.9 KB gzip         |
 | Font network payload               | 0 bytes (self-hosted) |
 | Texture payload in the 3D scene    | 0 bytes               |
+
+### Change in Stage 2.5, and what it means
+
+| Route                 | Stage 2  | Stage 2.5 | Δ           |
+| --------------------- | -------- | --------- | ----------- |
+| `/login`              | 255.0 KB | 259.3 KB  | **+4.3 KB** |
+| `/dashboard`          | 263.4 KB | 264.5 KB  | **+1.1 KB** |
+| `/customers/contacts` | 264.7 KB | 265.8 KB  | **+1.1 KB** |
+
+Login grew the most, and the cause is worth naming: the "Forgotten your
+password?" link pulls `next/link` into a page that previously had none. That is
+a real cost for a real feature, and it is the only reason login moved at all.
+
+Three whole subsystems — merge, erasure and CSV import — added **+1.1 KB to the
+contacts page**, because merge and import live on their own routes and every
+service behind them is server-only.
+
+**`/customers/companies` at 192.6 KB is now the cheapest route in the product**,
+and is the number to watch. It is a plain server-rendered table with no client
+component at all. If it ever approaches the others, something has been made
+interactive that did not need to be.
 
 ### Change since Stage 1, and what it means
 
@@ -79,8 +103,16 @@ the second check is unconditional and independent of the size budget, because
 the whole point of [ADR-0007](../decisions/ADR-0007-3d-stack.md) is that
 authentication never waits on 3D.
 
-Run it with `npm run verify:bundle`. It is not yet wired into CI (it needs a
-database and a full build); wiring it in is the next step.
+**Now wired into CI** as the `bundle` job (Stage 2.5). It needs a database and
+a full build, so it runs as its own job with a PostgreSQL service — that cost is
+the price of measuring the routes the product is actually used on, rather than
+only the login page.
+
+Run it locally with `npm run verify:bundle`.
+
+A budget that is only checked when someone remembers is not a budget. Stage 2
+measured honestly and wrote the numbers down; nothing stopped the next commit
+from doubling them. Now a route over budget fails the build.
 
 ---
 
