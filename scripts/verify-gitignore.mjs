@@ -129,6 +129,34 @@ const PROBES = [
   'packages/crm/src/temp/migration-helper.ts',
   'packages/crm/src/logs/activity-log.ts',
   'packages/crm/src/dist/bundled.ts',
+  // Stage 2.5. CSV import means real contact lists now pass through developer
+  // machines, and the temptation is a blanket `*.csv` rule. These two probes
+  // are what stop that: a test fixture and an example file must stay
+  // trackable, or a future tightening silently hides them.
+  'tests/fixtures/contacts.csv',
+  'packages/crm/src/import/fixtures/sample.csv',
+  'docs/examples/import-template.csv',
+  // `imports/` as a module name, against the `/imports/` customer-data rule —
+  // which is anchored precisely so this stays trackable.
+  'packages/crm/src/imports/mapper.ts',
+];
+
+/**
+ * Paths that MUST be ignored.
+ *
+ * The inverse of the probes above, and just as necessary: a rule that hides
+ * nothing is as broken as one that hides source, and only one of those two
+ * failures is loud.
+ */
+const MUST_BE_IGNORED = [
+  // A customer's exported contact list, saved next to the code.
+  'customer-data/leads.csv',
+  'imports/abc-plumbing-contacts.csv',
+  'apps/web/customers.export.csv',
+  'packages/crm/acme.contacts.csv',
+  // Database dumps, wherever someone writes them.
+  'growth_os.dump',
+  'dumps/nightly.sql.gz',
 ];
 
 for (const probe of PROBES) {
@@ -179,6 +207,19 @@ if (existsSync(resolve(repoRoot, '.env.example')) && isIgnored('.env.example')) 
 if (!isIgnored('.env.local')) {
   fail('.env.local is NOT ignored — secrets could be committed');
 }
+console.log('Checking customer data and dumps ARE ignored…');
+let ignoredCount = 0;
+for (const path of MUST_BE_IGNORED) {
+  if (isIgnored(path)) {
+    ignoredCount += 1;
+  } else {
+    fail(`${path} is NOT ignored — a customer's data could be committed`);
+  }
+}
+if (ignoredCount === MUST_BE_IGNORED.length) {
+  console.log(`  ✓ ${ignoredCount} customer-data paths are ignored`);
+}
+
 if (!isIgnored('.env')) {
   fail('.env is NOT ignored — secrets could be committed');
 }

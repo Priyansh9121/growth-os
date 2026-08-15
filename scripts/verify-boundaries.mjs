@@ -104,6 +104,26 @@ const PROBES = [
     file: 'packages/auth/src/__boundary_probe.ts',
     source: "import { cn } from '../../ui/src/lib/cn';\nexport const probe = cn;\n",
   },
+
+  // Stage 2.5. The lifecycle services are the most privileged code in the
+  // product — they are the only paths that can mutate the append-only timeline
+  // — so the boundaries around them are worth probing explicitly rather than
+  // assuming the package-level rules already cover them.
+  {
+    name: 'crm ingestion → next (would couple the ingestion boundary to HTTP)',
+    file: 'packages/crm/src/ingestion/__boundary_probe.ts',
+    source: "import { NextResponse } from 'next/server';\nexport const probe = NextResponse;\n",
+  },
+  {
+    name: 'crm import → node:fs (the CSV path must never touch disk)',
+    file: 'packages/crm/src/import/__boundary_probe.ts',
+    source: "import { writeFileSync } from 'node:fs';\nexport const probe = writeFileSync;\n",
+  },
+  {
+    name: 'ui → crm lifecycle services',
+    file: 'packages/ui/src/__boundary_probe.ts',
+    source: "import { eraseContact } from '@growth-os/crm';\nexport const probe = eraseContact;\n",
+  },
 ];
 
 let failures = 0;
