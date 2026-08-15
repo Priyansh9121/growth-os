@@ -80,3 +80,27 @@ ADRs, docs, code.
 | [0008](ADR-0008-login-transition-architecture.md) | Persistent scene host driven by an explicit state machine | Accepted |
 | [0009](ADR-0009-rate-limiting.md)                 | In-process rate limiting behind a driver interface        | Accepted |
 | [0010](ADR-0010-validation-and-contracts.md)      | Zod at every trust boundary                               | Accepted |
+
+### Stage 2 — CRM foundation
+
+| ADR                                                    | Title                                                | Status   |
+| ------------------------------------------------------ | ---------------------------------------------------- | -------- |
+| [0011](ADR-0011-crm-domain-model.md)                   | Contact / Acquisition / Opportunity as the CRM spine | Accepted |
+| [0012](ADR-0012-provenance-model.md)                   | Provenance with a required confidence level          | Accepted |
+| [0013](ADR-0013-soft-deletion-and-retention.md)        | Soft deletion, and why it is not erasure             | Accepted |
+| [0014](ADR-0014-activity-vs-audit.md)                  | Activity timeline vs. security audit log             | Accepted |
+| [0015](ADR-0015-contact-identity-and-deduplication.md) | Detect duplicates, never merge automatically         | Accepted |
+| [0016](ADR-0016-list-pagination-and-filtering.md)      | Keyset pagination with closed filter sets            | Accepted |
+| [0017](ADR-0017-content-security-policy.md)            | Nonce-based CSP with `strict-dynamic`                | Accepted |
+| [0018](ADR-0018-invitations-and-registration.md)       | Invitation-only access, no public registration       | Accepted |
+
+### Stage 2.5 — data lifecycle and ingestion readiness
+
+| ADR                                             | Title                                               | Status                |
+| ----------------------------------------------- | --------------------------------------------------- | --------------------- |
+| [0019](ADR-0019-contact-merge.md)               | Contact merge: forward-only, previewed              | Accepted              |
+| [0020](ADR-0020-privacy-erasure.md)             | Erasure: anonymise in place, keep the commercials   | Accepted              |
+| [0021](ADR-0021-ingestion-and-idempotency.md)   | One ingestion boundary, with idempotency receipts   | Accepted              |
+| [0022](ADR-0022-custom-field-storage.md)        | Custom fields: typed definitions, relational values | Accepted              |
+| [0023](ADR-0023-csv-import.md)                  | CSV import: validate all, then write in chunks      | Accepted              |
+| [0024](ADR-0024-multi-factor-authentication.md) | MFA: TOTP first, passkeys next, SMS never           | Accepted, impl. gated |
