@@ -121,7 +121,7 @@ export async function createTestHarness(): Promise<TestHarness> {
       // Every tenant table, including the Stage 2.5 additions. A table missing
       // from this list leaks rows between test cases, which surfaces as a test
       // that passes alone and fails in a suite — the worst kind to debug.
-      sql`TRUNCATE TABLE erasure_requests, import_batches, ingestion_receipts, contact_field_values, contact_field_definitions, contact_tags, tags, activities, tasks, opportunities, pipeline_stages, pipelines, acquisitions, contacts, companies, invitations, audit_events, agency_memberships, memberships, sessions, workspaces, agencies, users RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE password_reset_tokens, erasure_requests, import_batches, ingestion_receipts, contact_field_values, contact_field_definitions, contact_tags, tags, activities, tasks, opportunities, pipeline_stages, pipelines, acquisitions, contacts, companies, invitations, audit_events, agency_memberships, memberships, sessions, workspaces, agencies, users RESTART IDENTITY CASCADE`,
     );
   }
 

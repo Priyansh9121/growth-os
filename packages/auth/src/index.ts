@@ -13,3 +13,4 @@ export * from './rate-limit';
 export * from './http/index';
 export * from './login';
 export * from './invitations';
+export * from './password-reset';

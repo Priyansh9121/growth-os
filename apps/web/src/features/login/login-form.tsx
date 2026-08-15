@@ -18,6 +18,7 @@
  * @see docs/decisions/ADR-0008-login-transition-architecture.md
  */
 
+import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Field, GrowthMark } from '@growth-os/ui';
@@ -186,9 +187,19 @@ export function LoginForm({ next }: LoginFormProps) {
         Sign in
       </Button>
 
-      <p className="text-center text-caption text-text-subtle">
-        Accounts are created by invitation during Stage 1.
-      </p>
+      <div className="flex flex-col items-center gap-1.5">
+        <Link
+          href="/forgot-password"
+          className="text-caption text-text-muted transition-colors duration-[120ms] hover:text-signal focus-visible:outline-none"
+        >
+          Forgotten your password?
+        </Link>
+        {/* Registration is still invitation-only. Saying so is more useful
+            than a sign-up link that leads nowhere. */}
+        <p className="text-center text-caption text-text-subtle">
+          Accounts are created by invitation.
+        </p>
+      </div>
     </form>
   );
 }

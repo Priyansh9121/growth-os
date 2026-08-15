@@ -19,7 +19,14 @@ import 'server-only';
  */
 
 import { getDatabase, type Database } from '@growth-os/database';
-import { MemoryRateLimiter, type RateLimiter, type SessionConfig } from '@growth-os/auth';
+import {
+  ConsolePasswordResetNotifier,
+  MemoryRateLimiter,
+  type PasswordResetDependencies,
+  type PasswordResetNotifier,
+  type RateLimiter,
+  type SessionConfig,
+} from '@growth-os/auth';
 import { loadEnv, shouldUseSecureCookies, type Env } from '@growth-os/contracts/env';
 
 export interface AppDependencies {
@@ -33,6 +40,7 @@ export interface AppDependencies {
     readonly perIpMax: number;
     readonly windowSeconds: number;
   };
+  readonly passwordResetNotifier: PasswordResetNotifier;
 }
 
 /**
@@ -68,9 +76,58 @@ export function getDependencies(): AppDependencies {
       perIpMax: env.RATE_LIMIT_LOGIN_MAX * 3,
       windowSeconds: env.RATE_LIMIT_LOGIN_WINDOW_SECONDS,
     },
+    passwordResetNotifier: resolvePasswordResetNotifier(env),
   };
 
   return dependencies;
+}
+
+/**
+ * Choose the reset-link delivery mechanism.
+ *
+ * ⚠️ THROWS IN PRODUCTION rather than falling back to the console notifier.
+ *
+ * A no-op notifier in production means resets that are requested, never
+ * delivered, and never noticed — users locked out of a CRM holding their
+ * business, with nothing in any log to explain it. Refusing to boot is loud,
+ * immediate, and impossible to miss; the alternative is silent and discovered
+ * by a customer. Same rule as the invitation notifier (ADR-0018).
+ */
+function resolvePasswordResetNotifier(env: Env): PasswordResetNotifier {
+  if (env.NODE_ENV === 'production') {
+    throw new Error(
+      'No password reset delivery is configured. Wire a transactional email provider before running in production.',
+    );
+  }
+  return new ConsolePasswordResetNotifier();
+}
+
+/**
+ * Build the dependency bundle the password reset use case expects.
+ *
+ * Assembled here rather than at the route so the two reset endpoints cannot
+ * drift into using different limits or a different secret.
+ */
+export function getPasswordResetDependencies(): PasswordResetDependencies {
+  const deps = getDependencies();
+  return {
+    db: deps.db,
+    rateLimiter: deps.rateLimiter,
+    notifier: deps.passwordResetNotifier,
+    // The SAME secret as sessions, deliberately: rotating it must invalidate
+    // outstanding reset links as well as active sessions.
+    secret: deps.sessionConfig.secret,
+    // From configuration, NEVER from the request. A reset link built from a
+    // caller-supplied Host header is a phishing primitive.
+    appUrl: deps.env.APP_URL,
+    limits: {
+      // Tighter than sign-in. A failed login costs an attacker nothing; a
+      // reset request sends mail to a real person's inbox.
+      perIdentifierMax: 3,
+      perIpMax: 10,
+      windowSeconds: deps.env.RATE_LIMIT_LOGIN_WINDOW_SECONDS,
+    },
+  };
 }
 
 /** Test-only: inject overrides. */
