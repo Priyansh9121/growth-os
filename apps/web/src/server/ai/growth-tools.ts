@@ -31,6 +31,7 @@ import 'server-only';
 import { z } from 'zod';
 import { AutonomyLevel, defineTool, ToolRegistry } from '@growth-os/contracts';
 import { buildFixtureSnapshot } from '../../lib/fixtures/growth-demo';
+import { CRM_TOOLS } from './crm-tools';
 
 const metricSchema = z.object({
   key: z.string(),
@@ -129,8 +130,18 @@ export const getGrowthSnapshotTool = defineTool({
 /**
  * The registry available to the Growth Strategist agent.
  *
- * One tool today. Write tools (booking, content changes, workflow activation)
- * arrive with the agent runtime and will require `minimumAutonomy` of at least
- * `DRAFT_WITH_APPROVAL`.
+ * Stage 2 adds five read-only CRM tools. Every one is `effect: 'read'` — agents
+ * still have NO mutation capability. Write tools (booking, content changes,
+ * workflow activation) arrive with the agent runtime at Stage 7 and will
+ * require `minimumAutonomy` of at least `DRAFT_WITH_APPROVAL` plus the
+ * approval workflow.
+ *
+ * The CRM tools return deliberately minimised shapes — aggregates, first names
+ * and identifiers, never email addresses or phone numbers. Tool output becomes
+ * model context, so the narrowest shape that answers the question is the only
+ * safe one to return.
  */
-export const growthToolRegistry = new ToolRegistry([getGrowthSnapshotTool as never]);
+export const growthToolRegistry = new ToolRegistry([
+  getGrowthSnapshotTool as never,
+  ...(CRM_TOOLS as readonly unknown[] as never[]),
+]);
