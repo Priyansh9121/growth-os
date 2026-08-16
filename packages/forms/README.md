@@ -30,13 +30,13 @@ submission receipts.
 
 ## Contains
 
-| Path | Purpose |
-| ---- | ------- |
-| `shared/` | The forms execution context, capability guards, origin normalisation |
-| `sites/` | Web properties — shared with the Stage 4 crawler |
-| `forms/` | Admin CRUD, versioning, publishing |
-| `public/` | Form resolution, abuse controls, the submission service |
-| `tracking/` | Attribution context sanitisation |
+| Path        | Purpose                                                              |
+| ----------- | -------------------------------------------------------------------- |
+| `shared/`   | The forms execution context, capability guards, origin normalisation |
+| `sites/`    | Web properties — shared with the Stage 4 crawler                     |
+| `forms/`    | Admin CRUD, versioning, publishing                                   |
+| `public/`   | Form resolution, abuse controls, the submission service              |
+| `tracking/` | Attribution context sanitisation                                     |
 
 ## May depend on
 
