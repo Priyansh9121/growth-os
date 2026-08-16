@@ -60,6 +60,20 @@ const BUDGETS = [
   // real client code. Budgeted like the rest rather than exempted.
   { route: '/customers/import', budgetKb: 300, auth: true },
   { route: '/system/crm-fields', budgetKb: 300, auth: true },
+  // Stage 3.
+  { route: '/conversion/forms', budgetKb: 300, auth: true },
+  /**
+   * ⚠️ THE PUBLIC FORM, and the tightest budget in the product.
+   *
+   * It renders inside an iframe on a CUSTOMER'S WEBSITE, where our bytes
+   * compete with their Lighthouse score and their conversion rate. It is
+   * unauthenticated, so `auth: false` — it must render for a stranger.
+   *
+   * 200 KB is well below the app routes because it carries no shell, no
+   * navigation and no session: if it ever approaches them, something from the
+   * authenticated application has leaked into the public bundle.
+   */
+  { route: '/f/5eed0000000000000000000000000f01', budgetKb: 200, auth: false },
 ];
 
 /** three.js must never appear in a route's INITIAL bundle. */

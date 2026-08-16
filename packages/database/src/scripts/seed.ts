@@ -192,6 +192,114 @@ async function main(): Promise<void> {
       }));
     }
 
+    /**
+     * ⚠️ A FIXED PUBLIC KEY, which is safe precisely because the key was never
+     * a secret (ADR-0026 §1).
+     *
+     * A stable key gives the bundle-budget gate and the E2E suite a real
+     * hosted form to load rather than each inventing its own fixture, and
+     * gives a developer running the seed something they can open immediately.
+     *
+     * DEMO DATA in a development database — the seed refuses to run when
+     * NODE_ENV=production.
+     */
+    const demoFormKey = '5eed0000000000000000000000000f01';
+
+    if (abc && samUser) {
+      // -----------------------------------------------------------------------
+      // A published lead capture form (Stage 3).
+      // -----------------------------------------------------------------------
+      //
+      // The two tables reference each other, so one write has to come second.
+      // The FORM goes first: `published_version_id` is nullable, while
+      // `form_versions.form_id` is NOT NULL with a foreign key — so a
+      // version-first order would need a placeholder id the constraint refuses.
+      //
+      // The intermediate state is also the CORRECT one: a form with no published
+      // version accepts nothing, which is exactly what a half-built form should
+      // do if the seed were interrupted here.
+      const [demoForm] = await db
+        .insert(schema.forms)
+        .values({
+          workspaceId: abc.id,
+          name: 'Website enquiry',
+          publicKey: demoFormKey,
+          status: 'active',
+          createdByUserId: samUser.id,
+        })
+        .returning({ id: schema.forms.id });
+
+      const [demoVersion] = await db
+        .insert(schema.formVersions)
+        .values({
+          workspaceId: abc.id,
+          formId: demoForm!.id,
+          version: 1,
+          fields: [
+            {
+              key: 'first_name',
+              type: 'text',
+              label: 'First name',
+              required: true,
+              target: 'firstName',
+              maxLength: 500,
+            },
+            {
+              key: 'last_name',
+              type: 'text',
+              label: 'Last name',
+              required: false,
+              target: 'lastName',
+              maxLength: 500,
+            },
+            {
+              key: 'email',
+              type: 'email',
+              label: 'Email',
+              required: true,
+              target: 'email',
+              maxLength: 500,
+            },
+            {
+              key: 'phone',
+              type: 'phone',
+              label: 'Phone',
+              required: false,
+              target: 'phone',
+              maxLength: 500,
+            },
+            {
+              key: 'message',
+              type: 'textarea',
+              label: 'How can we help?',
+              required: false,
+              target: 'note',
+              maxLength: 1000,
+            },
+          ],
+          settings: {
+            submitLabel: 'Send enquiry',
+            success: {
+              kind: 'message',
+              message: 'Thanks — we have your enquiry and will be in touch shortly.',
+            },
+            opportunity: { enabled: true, titleTemplate: '{contact} — {form}' },
+            theme: 'auto',
+            allowedOrigins: [],
+            honeypotEnabled: true,
+            minSubmitSeconds: 0,
+          },
+        })
+        .returning({ id: schema.formVersions.id });
+
+      // Publish it. Until this runs, `resolve_public_form` INNER JOINs a NULL
+      // and the key resolves to nothing.
+      await db
+        .update(schema.forms)
+        .set({ publishedVersionId: demoVersion!.id })
+        .where(eq(schema.forms.id, demoForm!.id));
+    }
+
     console.log('Seed complete.\n');
     console.log('  Agency     Northbeam Growth Partners');
     console.log('  Workspaces ABC Plumbing, Harbour Dental (agency) · Meridian Legal (direct)\n');
@@ -203,6 +311,9 @@ async function main(): Promise<void> {
     console.log(
       `    ${crmCounts.contacts} contacts · ${crmCounts.opportunities} opportunities · ${crmCounts.tasks} tasks\n`,
     );
+    console.log('  Lead capture (ABC Plumbing):');
+    console.log(`    Hosted form  /f/${demoFormKey}`);
+    console.log('    Opens a deal in the Sales pipeline on every enquiry\n');
   } finally {
     await client.end();
   }

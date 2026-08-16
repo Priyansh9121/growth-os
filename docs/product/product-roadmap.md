@@ -2,7 +2,7 @@
 
 **Status:** Living document
 **Last reviewed:** 2026-08-16
-**Current stage:** Stage 3 (complete); Stage 4 next
+**Current stage:** Stage 3 — **in progress**
 
 > **⚠️ The stage order changed after Stage 2.5.** The crawler was Stage 3 and is
 > now Stage 4; Lead Capture was Stage 10 and is now Stage 3. The reasoning is
@@ -210,7 +210,7 @@ rankings produce has no loop to close.
 
 ---
 
-## Stage 3 — Lead capture & attribution ingestion ✅
+## Stage 3 — Lead capture & attribution ingestion 🔨
 
 **Objective:** Prove that a real, anonymous website visitor can become a
 truthfully attributed CRM lead through the same ingestion path every future

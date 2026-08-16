@@ -22,7 +22,7 @@ transaction that later rolls back simply does not exist. Enqueuing to Redis from
 inside a database transaction is a distributed-commit problem, and the standard
 solution to it is an outbox table in PostgreSQL.
 
-Redis is also rejected *for now* because distributed rate limiting would put a
+Redis is also rejected _for now_ because distributed rate limiting would put a
 new hard dependency in the lead-capture path — fail closed and a customer's form
 stops accepting enquiries because our cache is down; fail open and the limiter
 silently stops working.
@@ -36,11 +36,11 @@ that is the line between a second process and a second service
 
 ## Jobs
 
-| Job | Rule | Schedule |
-| --- | ---- | -------- |
-| `prune-expired-sessions` | Past idle or absolute expiry | Hourly |
-| `prune-expired-reset-tokens` | Expired, plus used older than one TTL | Hourly |
-| `prune-rate-limit-windows` | Counter windows that can no longer be current | Hourly |
+| Job                          | Rule                                          | Schedule |
+| ---------------------------- | --------------------------------------------- | -------- |
+| `prune-expired-sessions`     | Past idle or absolute expiry                  | Hourly   |
+| `prune-expired-reset-tokens` | Expired, plus used older than one TTL         | Hourly   |
+| `prune-rate-limit-windows`   | Counter windows that can no longer be current | Hourly   |
 
 ### ⚠️ What is deliberately NOT scheduled
 
