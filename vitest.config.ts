@@ -41,7 +41,11 @@ export default defineConfig({
         test: {
           name: 'integration',
           environment: 'node',
-          include: ['packages/*/src/**/*.integration.test.ts', 'tests/integration/**/*.test.ts'],
+          include: [
+            'packages/*/src/**/*.integration.test.ts',
+            'apps/*/src/**/*.integration.test.ts',
+            'tests/integration/**/*.test.ts',
+          ],
           // Argon2 hashing is intentionally slow (~50ms each) and these tests
           // exercise the real login path, so the default 5s timeout is tight.
           testTimeout: 30_000,

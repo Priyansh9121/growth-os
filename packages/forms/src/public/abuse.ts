@@ -24,7 +24,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { sql } from 'drizzle-orm';
+import { lt, sql } from 'drizzle-orm';
 import type { RejectionReason } from '@growth-os/contracts';
 import { schemaTables, withUnscopedTransaction, type Database } from '@growth-os/database';
 
@@ -177,11 +177,22 @@ export async function consumePublicRateLimit(
   });
 }
 
-/** Delete counters from windows that can no longer be current. Worker job. */
+/**
+ * Delete counters from windows that can no longer be current. Worker job.
+ *
+ * ⚠️ `lt()` rather than a raw `sql` template. A `Date` bound inside a raw
+ * template is not serialised by postgres.js and throws at runtime — the FOURTH
+ * occurrence of this class in the codebase, and the first one a scheduled job
+ * hit rather than a test. Drizzle's typed comparators handle the conversion;
+ * raw templates need an explicit ISO string and a cast.
+ *
+ * Nothing depends on this having run: the window start is re-checked on every
+ * read, so a missed sweep costs storage and never correctness.
+ */
 export async function pruneRateLimitWindows(db: Database, olderThan: Date): Promise<number> {
   const deleted = await db
     .delete(publicSubmissionLimits)
-    .where(sql`${publicSubmissionLimits.windowStartedAt} < ${olderThan}`)
+    .where(lt(publicSubmissionLimits.windowStartedAt, olderThan))
     .returning({ subjectHash: publicSubmissionLimits.subjectHash });
   return deleted.length;
 }

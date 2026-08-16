@@ -341,6 +341,49 @@ export default tseslint.config(
     },
   },
 
+  /**
+   * The worker is a SECOND PROCESS, not a second service.
+   *
+   * ⚠️ THIS BLOCK MUST STAY AFTER the generic `apps/**` block above. ESLint
+   * flat config does not MERGE rule options — the last matching block replaces
+   * them wholesale. Placed before it, these restrictions were silently
+   * discarded and the boundary probes proved it: four illegal imports compiled
+   * happily.
+   *
+   * It shares the repository, the packages and the database, and has no
+   * network API between it and the web app. These rules are what keep that
+   * true: a worker that could import React or Next is one refactor from
+   * rendering, and one that could import `apps/web` has stopped being part of
+   * the same deployable (ADR-0001, ADR-0030).
+   */
+  {
+    files: ['apps/worker/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            { name: 'react', message: 'The worker renders nothing.' },
+            { name: 'next', message: 'The worker serves no HTTP and renders nothing.' },
+          ],
+          patterns: [
+            {
+              group: ['next/*', '@growth-os/ui', '@growth-os/ui/*'],
+              message: 'The worker renders nothing and serves no HTTP.',
+            },
+            {
+              group: ['**/apps/web/**', '../../web/**'],
+              message:
+                'The worker must not import the web app. Share through a package — importing an app makes this a second service (ADR-0030).',
+            },
+          ],
+        },
+      ],
+      // Printing IS a worker's interface; it has no other output channel.
+      'no-console': 'off',
+    },
+  },
+
   // Tests may be looser: non-null assertions on fixtures are noise-reduction,
   // not risk, and casting is often required to exercise a boundary.
   {

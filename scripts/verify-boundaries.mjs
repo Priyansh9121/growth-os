@@ -124,6 +124,32 @@ const PROBES = [
     file: 'packages/ui/src/__boundary_probe.ts',
     source: "import { eraseContact } from '@growth-os/crm';\nexport const probe = eraseContact;\n",
   },
+
+  // Stage 3. The worker is a second PROCESS in the monolith, not a second
+  // service — so the boundaries that keep it one are probed rather than
+  // assumed. A worker that could import the web app, or render, has quietly
+  // become a microservice.
+  {
+    name: 'worker \u2192 next (a worker must not render or serve)',
+    file: 'apps/worker/src/__boundary_probe.ts',
+    source: "import { NextResponse } from 'next/server';\nexport const probe = NextResponse;\n",
+  },
+  {
+    name: 'worker \u2192 react',
+    file: 'apps/worker/src/__boundary_probe.ts',
+    source: "import { useState } from 'react';\nexport const probe = useState;\n",
+  },
+  {
+    name: 'worker \u2192 ui design system',
+    file: 'apps/worker/src/__boundary_probe.ts',
+    source: "import { cn } from '@growth-os/ui';\nexport const probe = cn;\n",
+  },
+  {
+    name: 'worker \u2192 apps/web (would make it a second service)',
+    file: 'apps/worker/src/__boundary_probe.ts',
+    source:
+      "import { getDependencies } from '../../web/src/server/dependencies';\nexport const probe = getDependencies;\n",
+  },
 ];
 
 let failures = 0;

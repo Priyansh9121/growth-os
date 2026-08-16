@@ -1,0 +1,21 @@
+{
+  "name": "@growth-os/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Background job runner. A second process in the modular monolith, not a second service.",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@growth-os/auth": "*",
+    "@growth-os/contracts": "*",
+    "@growth-os/database": "*",
+    "@growth-os/forms": "*",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6"
+  }
+}
