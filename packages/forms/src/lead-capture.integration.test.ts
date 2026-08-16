@@ -26,6 +26,7 @@ import {
   type WorkspaceRole,
 } from '@growth-os/contracts';
 import {
+  assertRestrictedRole,
   createTestHarness,
   hasTestDatabase,
   schemaTables,
@@ -157,6 +158,11 @@ describeIntegration('lead capture', () => {
 
   beforeAll(async () => {
     harness = await createTestHarness();
+    // Every submission below runs through `harness.app`, the RESTRICTED role.
+    // A superuser or a table owner is EXEMPT from row-level security, so a
+    // suite that connected as the migration role would pass while proving
+    // nothing about the public path's isolation.
+    await assertRestrictedRole(harness);
   });
 
   afterAll(async () => {

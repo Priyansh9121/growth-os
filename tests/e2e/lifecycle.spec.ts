@@ -266,10 +266,18 @@ test.describe('CSV import', () => {
 
   test('validates before writing, then imports and reports honestly', async ({ page }) => {
     const suffix = Date.now();
+    // ⚠️ The SURNAME is unique, not only the email.
+    //
+    // This searched for `/Halloway/` and asserted one match, which held until
+    // the Stage 3 lead-capture suite started creating its own Halloways in the
+    // same database — six of them, and a strict-mode violation. A test that
+    // asserts on a name another suite can also produce is asserting on shared
+    // mutable state.
+    const surname = `Halloway${suffix}`;
     const csv = [
       'First name,Last name,Email,Source',
-      `Wren,Halloway,wren-${suffix}@example.test,Google`,
-      `Ines,Barros,ines-${suffix}@example.test,Word of mouth`,
+      `Wren,${surname},wren-${suffix}@example.test,Google`,
+      `Ines,Barros${suffix},ines-${suffix}@example.test,Word of mouth`,
       // No first name and no identity: reported, never imported.
       ',,,',
     ].join('\n');
@@ -300,8 +308,8 @@ test.describe('CSV import', () => {
       timeout: 20_000,
     });
 
-    await page.goto(`/customers/contacts?q=Halloway`);
-    await expect(page.getByRole('link', { name: /Halloway/ })).toBeVisible();
+    await page.goto(`/customers/contacts?q=${surname}`);
+    await expect(page.getByRole('link', { name: new RegExp(surname) })).toBeVisible();
   });
 
   test('refuses a file it cannot read, without importing anything', async ({ page }) => {

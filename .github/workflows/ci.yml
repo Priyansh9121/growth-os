@@ -94,6 +94,29 @@ jobs:
           TEST_DATABASE_URL: postgresql://growth_os_owner:ci_only_password@localhost:5432/growth_os_test
         run: npm run test:integration
 
+      - name: The worker boots, drains a queue, and exits on its own
+        # ⚠️ THE TIMEOUT IS THE ASSERTION.
+        #
+        # The failure this guards is a process that does all its work correctly
+        # and then never returns, because something still holds the event loop
+        # open — an idle pooled connection, in the case that caused it. That is
+        # indistinguishable from success in every log, and it looks like a
+        # healthy run right up until CI hangs for six hours.
+        #
+        # `timeout 90` turns it into a failed step in ninety seconds. A pass
+        # takes about one.
+        #
+        # This also exercises real scheduling and real claiming against a real
+        # database, so the step proves the worker RUNS rather than only that it
+        # compiles.
+        env:
+          DATABASE_URL: postgresql://growth_os_owner:ci_only_password@localhost:5432/growth_os_test
+          SESSION_SECRET: ci-only-secret-not-used-anywhere-else-32
+          APP_URL: http://127.0.0.1:3000
+        run: |
+          npm run db:migrate
+          timeout 90 npm run worker -- --once
+
   component:
     name: Component and accessibility tests
     runs-on: ubuntu-latest
