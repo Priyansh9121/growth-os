@@ -418,14 +418,47 @@ function isSafeRedirect(url: string): boolean {
   }
 }
 
+const ATTRIBUTION_KEYS = [
+  'landingPath',
+  'referrerOrigin',
+  'utmSource',
+  'utmMedium',
+  'utmCampaign',
+  'utmTerm',
+  'utmContent',
+  'gclid',
+  'fbclid',
+  'sessionId',
+] as const;
+
 /**
- * Read attribution from `sessionStorage`.
+ * Read attribution, preferring a stored FIRST TOUCH over this page's own URL.
  *
- * Returns `{}` when unavailable — blocked, disabled, private mode, consent
- * declined. **The form must work regardless**: a business must never lose an
- * enquiry because a visitor declined marketing tracking (ADR-0028 §5).
+ * TWO SOURCES, IN THAT ORDER, AND THE ORDER IS THE POINT.
+ *
+ *  1. `sessionStorage`, written by the tracking script on the customer's site.
+ *     A visitor who landed on `/emergency-plumber?utm_campaign=…` and reached
+ *     the form on `/contact` is attributed to the campaign — first touch wins.
+ *
+ *  2. Failing that, THIS PAGE'S OWN URL. The hosted form at `/f/<key>` is
+ *     shared directly in email campaigns, QR codes and ad landing links, where
+ *     the form page IS the landing page. Without this, every one of those
+ *     visits was recorded as `direct` and the campaign that paid for it was
+ *     invisible — which an end-to-end test caught after the classifier,
+ *     ingestion and CRM had all behaved perfectly on data that never arrived.
+ *
+ * Returns `{}` when neither yields anything. **The form works regardless**: a
+ * business must never lose an enquiry because a visitor declined tracking
+ * (ADR-0028 §5).
  */
 function readAttribution(): Record<string, string> {
+  const stored = readStoredAttribution();
+  // A stored first touch is never overwritten by the current page.
+  if (Object.keys(stored).length > 0) return stored;
+  return readUrlAttribution();
+}
+
+function readStoredAttribution(): Record<string, string> {
   try {
     const raw = window.sessionStorage.getItem('growth-os.attribution');
     if (!raw) return {};
@@ -434,21 +467,55 @@ function readAttribution(): Record<string, string> {
 
     const source = parsed as Record<string, unknown>;
     const result: Record<string, string> = {};
-    for (const key of [
-      'landingPath',
-      'referrerOrigin',
-      'utmSource',
-      'utmMedium',
-      'utmCampaign',
-      'utmTerm',
-      'utmContent',
-      'gclid',
-      'fbclid',
-      'sessionId',
-    ]) {
+    for (const key of ATTRIBUTION_KEYS) {
       const value = source[key];
       if (typeof value === 'string' && value.length > 0) result[key] = value;
     }
+    return result;
+  } catch {
+    // Blocked, disabled, private mode, quota, or corrupt JSON. Fall through to
+    // the URL rather than failing — attribution is best-effort, always.
+    return {};
+  }
+}
+
+/**
+ * Derive attribution from the current URL.
+ *
+ * Applies the SAME privacy rules as the tracking script, because the server
+ * cannot tell which one produced a value: the path is stored without its query
+ * string, and the referrer is reduced to an origin — both because query strings
+ * routinely carry personal data (ADR-0028 §3).
+ */
+function readUrlAttribution(): Record<string, string> {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const result: Record<string, string> = {
+      // PATH only. The parameters below are read individually; the rest of the
+      // query string is discarded rather than stored.
+      landingPath: window.location.pathname.slice(0, 512),
+    };
+
+    for (const [param, key] of [
+      ['utm_source', 'utmSource'],
+      ['utm_medium', 'utmMedium'],
+      ['utm_campaign', 'utmCampaign'],
+      ['utm_term', 'utmTerm'],
+      ['utm_content', 'utmContent'],
+      ['gclid', 'gclid'],
+      ['fbclid', 'fbclid'],
+    ] as const) {
+      const value = params.get(param);
+      if (value) result[key] = value.slice(0, 255);
+    }
+
+    if (document.referrer) {
+      const referrer = new URL(document.referrer);
+      // ORIGIN only — a Google referrer's `?q=` is discarded here, and a
+      // referrer from our own origin is a navigation, not an acquisition.
+      if (referrer.origin !== window.location.origin) result['referrerOrigin'] = referrer.origin;
+    }
+
     return result;
   } catch {
     return {};
