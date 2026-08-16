@@ -40,7 +40,8 @@
     "verify:boundaries": "node scripts/verify-boundaries.mjs",
     "e2e:ui": "playwright test --ui",
     "verify:bundle": "node scripts/check-bundle-budget.mjs",
-    "build:public-scripts": "node scripts/build-public-scripts.mjs"
+    "build:public-scripts": "node scripts/build-public-scripts.mjs",
+    "worker": "npm run start --workspace @growth-os/worker --"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
