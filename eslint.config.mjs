@@ -29,6 +29,10 @@ export default tseslint.config(
       '**/migrations/**',
       '**/*.d.ts',
       'apps/web/next-env.d.ts',
+      // Minified build output of the public scripts. The SOURCES in
+      // apps/web/scripts/*.src.js are linted; linting their minified form
+      // reports on esbuild's choices, not ours.
+      'apps/web/public/scripts/**',
     ],
   },
 
@@ -369,5 +373,30 @@ export default tseslint.config(
       globals: globals.node,
     },
     rules: { 'no-console': 'off' },
+  },
+
+  /**
+   * The two scripts that run on a CUSTOMER'S WEBSITE.
+   *
+   * Plain ES5-compatible browser IIFEs, deliberately not TypeScript and
+   * deliberately not modules: they must minify to a few hundred bytes with no
+   * runtime and no imports (ADR-0027).
+   *
+   * `no-empty` is off because an empty `catch` is the CORRECT handling here —
+   * `sessionStorage` throws in private mode and when quota is exhausted, and
+   * the right response is to carry on without attribution rather than to break
+   * a stranger's page. The comment inside each block says so.
+   */
+  {
+    files: ['apps/web/scripts/*.src.js'],
+    languageOptions: {
+      ecmaVersion: 2017,
+      sourceType: 'script',
+      globals: globals.browser,
+    },
+    rules: {
+      'no-empty': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { caughtErrors: 'none' }],
+    },
   },
 );

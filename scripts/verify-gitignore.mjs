@@ -79,7 +79,16 @@ for (const root of SOURCE_ROOTS) {
     .filter((path) => !path.endsWith('.tsbuildinfo'))
     .filter((path) => !path.includes('next-env.d.ts'))
     .filter((path) => !path.includes('/coverage/'))
-    .filter((path) => !path.endsWith('.DS_Store'));
+    .filter((path) => !path.endsWith('.DS_Store'))
+    // BUILD OUTPUT of the public scripts (Stage 3). Generated from the tracked
+    // sources in `apps/web/scripts/*.src.js`, with the deployment's origin
+    // baked in — committing it would ship whichever origin the last developer
+    // had configured.
+    //
+    // Narrowed to the exact build directory rather than to `*.js`, because the
+    // SOURCES are the most security-sensitive files in the repository and a
+    // broader exemption would stop this check noticing if one were hidden.
+    .filter((path) => !path.startsWith('apps/web/public/scripts/'));
 
   for (const path of ignoredHere) {
     fail(`first-party path is IGNORED: ${path}`);
@@ -139,6 +148,13 @@ const PROBES = [
   // `imports/` as a module name, against the `/imports/` customer-data rule —
   // which is anchored precisely so this stays trackable.
   'packages/crm/src/imports/mapper.ts',
+  // Stage 3. The embed and tracking SOURCES run on customer websites and are
+  // the most security-sensitive files in the repository — a rule that hid one
+  // would hide the code we most need reviewed.
+  'apps/web/scripts/embed.src.js',
+  'apps/web/scripts/track.src.js',
+  'packages/forms/src/public/submit.ts',
+  'tests/fixtures/forms/sample-submission.json',
 ];
 
 /**
@@ -157,6 +173,9 @@ const MUST_BE_IGNORED = [
   // Database dumps, wherever someone writes them.
   'growth_os.dump',
   'dumps/nightly.sql.gz',
+  // Built output, anchored so it cannot hide the sources above.
+  'apps/web/public/scripts/embed.js',
+  'apps/web/public/scripts/track.js',
 ];
 
 for (const probe of PROBES) {
