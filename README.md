@@ -4,13 +4,15 @@
 capture, CRM, AI agents and revenue attribution into one measurable loop — so a
 business can see which acquisition work produced revenue, not just rankings.
 
-> **Status: Stage 2.5 of 23 — CRM data lifecycle.** On top of the Stage 2 CRM,
-> Growth OS can now **correct and remove** the data it records: contact merge,
-> irreversible PII erasure that preserves the commercial record, one idempotent
-> ingestion boundary, CSV import, tags, custom fields and password reset.
-> **No SEO, voice, automation or revenue attribution exists yet.** Dashboard
-> metrics are a labelled mix of live CRM counts and remaining fixtures.
-> See [docs/product/product-roadmap.md](docs/product/product-roadmap.md).
+> **Status: Stage 3 of 23 — lead capture & attribution ingestion.** The first
+> complete commercial loop works: a business configures a form, embeds it on
+> their website, and an **anonymous visitor becomes a CRM lead automatically**,
+> with first-party acquisition classified by deterministic code rather than
+> guessed. Background jobs run on `apps/worker`.
+> **No SEO, voice, automation or revenue attribution exists yet**, and search
+> queries come from Search Console — which is Stage 6, so nothing here reports
+> one. Dashboard metrics are a labelled mix of live CRM counts and remaining
+> fixtures. See [docs/product/product-roadmap.md](docs/product/product-roadmap.md).
 
 ---
 
@@ -41,12 +43,12 @@ lint-enforced boundaries, so extraction later is a deployment change rather
 than a rewrite ([ADR-0001](docs/decisions/ADR-0001-architecture-style.md)).
 
 ```
-apps/web (Next.js)          ⬜ apps/api  ⬜ apps/worker  ⬜ apps/voice
+apps/web (Next.js)   apps/worker (jobs)      ⬜ apps/api  ⬜ apps/voice
         │                                    │
         ▼                                    ▼
    @growth-os/auth ──▶ @growth-os/database ──▶ PostgreSQL (+ RLS)
-        │                     │
-        ▼                     ▼
+        │              @growth-os/forms ──▶ @growth-os/crm
+        ▼                     │
           @growth-os/contracts          @growth-os/ui
 ```
 
@@ -72,21 +74,30 @@ apps/web (Next.js)          ⬜ apps/api  ⬜ apps/worker  ⬜ apps/voice
 | Idempotent ingestion boundary; a retried webhook creates nothing   | ✅                                                                                                                  |
 | CSV import — validate first, chunked writes, honest partial result | ✅                                                                                                                  |
 | Tags, typed custom fields, companies                               | ✅                                                                                                                  |
+| Lead capture: forms, versioning, publishing, embed, hosted form    | ✅                                                                                                                  |
+| Public submission endpoint — anonymous, tenant-safe, idempotent    | ✅                                                                                                                  |
+| First-party attribution: UTM, click ids, first touch, no cookies   | ✅                                                                                                                  |
+| Deterministic source classification — **no LLM, no fabrication**   | ✅                                                                                                                  |
+| Background worker: PostgreSQL queue, retries, retention jobs       | ✅                                                                                                                  |
+| Spam & abuse controls — honeypot, timing, two-tier rate limiting   | 🔨 **no CAPTCHA provider; burst tier is per instance**                                                              |
 | Password reset — enumeration-safe, single-use, revokes sessions    | 🔨 **no email provider; link is not delivered**                                                                     |
 | Ask Growth AI — typed tool boundary, **no model connected**        | 🔨                                                                                                                  |
 | Dashboard metrics                                                  | 🔨 **fixtures, labelled as such in the UI**                                                                         |
 | Multi-factor authentication                                        | ⬜ Decided ([ADR-0024](docs/decisions/ADR-0024-multi-factor-authentication.md)), gated on the first external tenant |
 | Erasure replay after a backup restore                              | ⬜ Specified; no backup system exists yet                                                                           |
-| SEO, voice, automation, attribution                                | ⬜ Stages 3–15                                                                                                      |
+| Website crawler, SEO audit, Search Console, rank tracking          | ⬜ Stages 4–6                                                                                                       |
+| Voice, automation, revenue attribution                             | ⬜ Stages 7–15                                                                                                      |
 
 ## Repository structure
 
 ```
-apps/web/              Next.js app: UI, route handlers, the only runtime host
+apps/web/              Next.js app: UI, route handlers, the public form
+apps/worker/           Background jobs — a second process, not a second service
 packages/contracts/    Types, Zod schemas, typed errors, the AI tool contract
 packages/database/     Drizzle schema, migrations, tenant transactions, seed
 packages/auth/         Passwords, sessions, tenancy authorization, invitations
 packages/crm/          CRM services: contacts, provenance, pipelines, timeline
+packages/forms/        Lead capture: sites, forms, the public submission path
 packages/ui/           Design tokens and accessible React primitives
 docs/                  Product, architecture, ADRs, design, security, ops
 scripts/               Repository safety verifiers

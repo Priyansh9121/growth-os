@@ -42,6 +42,8 @@ How the system is shaped and why those boundaries exist.
 - [module-boundaries.md](architecture/module-boundaries.md) — the dependency rules, and how they are enforced
 - [multi-tenancy.md](architecture/multi-tenancy.md) — platform → agency → workspace
 - [crm-architecture.md](architecture/crm-architecture.md) — the CRM spine, provenance, IDOR defence
+- [lead-capture-architecture.md](architecture/lead-capture-architecture.md) — how an anonymous visitor becomes an attributed lead
+- [worker-architecture.md](architecture/worker-architecture.md) — background jobs, the queue, and who owns the database pool
 - [data-architecture.md](architecture/data-architecture.md) — current schema and the planned domain model
 - [event-architecture.md](architecture/event-architecture.md) — the future event backbone
 - [ai-agent-architecture.md](architecture/ai-agent-architecture.md) — agents, tools, autonomy levels
@@ -82,6 +84,9 @@ superseded rather than edited. See [decisions/README.md](decisions/README.md).
 - [threat-model.md](security/threat-model.md)
 - [authentication.md](security/authentication.md)
 - [tenant-isolation.md](security/tenant-isolation.md)
+- [data-lifecycle.md](security/data-lifecycle.md) — retention, erasure, and what is deliberately not scheduled
+- [public-forms-threat-model.md](security/public-forms-threat-model.md) — the first endpoint reachable by anyone
+- [attribution-privacy.md](security/attribution-privacy.md) — what is captured about a visitor, and what is not
 - [secrets.md](security/secrets.md)
 - [secure-development.md](security/secure-development.md)
 
