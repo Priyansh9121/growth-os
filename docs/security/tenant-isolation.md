@@ -1,7 +1,7 @@
 # Tenant Isolation
 
-**Status:** Implemented and tested (Stage 1)
-**Last reviewed:** 2026-08-15
+**Status:** Implemented and tested (Stage 1; re-verified Stage 3)
+**Last reviewed:** 2026-08-16
 **Governing ADR:** [ADR-0005](../decisions/ADR-0005-multi-tenancy-model.md)
 
 Cross-tenant data exposure is the one bug class that ends this company. It is
@@ -92,16 +92,15 @@ be interpreted as SQL.
 (authenticating a user, resolving memberships). It is named conspicuously so
 its use is obvious in review and greppable in an audit.
 
-### ⚠️ The two tables that carry `workspace_id` and have NO row-level security
+### ⚠️ The one table that carries `workspace_id` and has NO row-level security
 
-Both are deliberate, and both are recorded here because "a table with
-`workspace_id` and no policy" is exactly the kind of thing a later audit should
-find an answer attached to.
+It is deliberate, and it is recorded here because "a table with `workspace_id`
+and no policy" is exactly the kind of thing a later audit should find an answer
+attached to.
 
-| Table                   | Why no RLS                                                                                                                                                                                                                              |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `memberships`           | It is the table that **defines** workspace access. `resolveActor` reads a user's memberships across all workspaces before any scope exists, so a policy keyed on `app.workspace_id` would match nothing and break authentication itself |
-| `password_reset_tokens` | User-scoped, not workspace-scoped, and read by someone who is not authenticated. There is no tenant scope to filter by                                                                                                                  |
+| Table         | Why no RLS                                                                                                                                                                                                                              |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `memberships` | It is the table that **defines** workspace access. `resolveActor` reads a user's memberships across all workspaces before any scope exists, so a policy keyed on `app.workspace_id` would match nothing and break authentication itself |
 
 What protects `memberships` instead is that it is written only by invitation
 acceptance and membership administration — both of which check a capability
@@ -118,9 +117,30 @@ SELECT c.relname FROM pg_class c
    AND NOT (c.relrowsecurity AND c.relforcerowsecurity);
 ```
 
-As of Stage 2.5 that query returns one row. Every other workspace-owned table —
-**seventeen of them** — is ENABLE _and_ FORCE, asserted per table by the
-integration suites.
+As of Stage 3 that query returns one row, still `memberships`. Every other
+workspace-owned table — **twenty-one of them** — is ENABLE _and_ FORCE,
+asserted per table by the integration suites. Stage 3 added four: `sites`,
+`forms`, `form_versions` and `form_submissions`.
+
+### The tables that carry no `workspace_id` at all
+
+A different list, and worth keeping separate: these are not workspace-owned, so
+RLS keyed on `app.workspace_id` would have nothing to filter by.
+
+| Table                                | What it is                                                                                              |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `users`                              | A person, who may belong to several workspaces                                                          |
+| `sessions`                           | A person's session, established before any workspace is chosen                                          |
+| `password_reset_tokens`              | User-scoped, and read by someone who is not authenticated                                               |
+| `agencies`                           | Sits **above** workspaces                                                                               |
+| `agency_memberships`                 | Likewise                                                                                                |
+| `workspaces`                         | The tenant itself                                                                                       |
+| `jobs` (Stage 3)                     | **Platform** background work. Any future job touching customer data must open a `withTenantTransaction` |
+| `public_submission_limits` (Stage 3) | Rate-limit counters keyed by `SHA-256(scope:value)`. Not tenant data — and **the IP is never stored**   |
+
+`jobs` and `public_submission_limits` are the two to watch. The first is a
+fan-out surface a later stage will be tempted to put a workspace's data in; the
+second would become tenant data the moment anyone keyed it by workspace.
 
 ## Layer 3 — PostgreSQL row-level security
 

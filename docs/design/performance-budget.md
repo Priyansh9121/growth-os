@@ -1,7 +1,7 @@
 # Performance Budget
 
-**Status:** Measured and gated in CI (Stage 2.5)
-**Last measured:** 2026-08-15
+**Status:** Measured and gated in CI (Stage 3)
+**Last measured:** 2026-08-16
 
 Every number below was produced by a command that is written down. Nothing here
 is estimated, and figures that have **not** been measured say so explicitly
@@ -24,14 +24,34 @@ matching typical CDN defaults.
 
 | Route                  | Measured (gzip) | Budget | Chunks | Status |
 | ---------------------- | --------------- | ------ | ------ | ------ |
-| `/login`               | **259.3 KB**    | 275 KB | 12     | ✅     |
-| `/dashboard`           | **264.5 KB**    | 285 KB | 13     | ✅     |
-| `/customers/contacts`  | **265.8 KB**    | 300 KB | 13     | ✅     |
+| `/login`               | **260.2 KB**    | 275 KB | 12     | ✅     |
+| `/dashboard`           | **265.3 KB**    | 285 KB | 13     | ✅     |
+| `/customers/contacts`  | **266.7 KB**    | 300 KB | 13     | ✅     |
 | `/customers/pipeline`  | **198.1 KB**    | 300 KB | 12     | ✅     |
 | `/customers/tasks`     | **198.1 KB**    | 300 KB | 12     | ✅     |
 | `/customers/companies` | **192.6 KB**    | 300 KB | 10     | ✅     |
-| `/customers/import`    | **266.1 KB**    | 300 KB | 13     | ✅     |
-| `/system/crm-fields`   | **265.0 KB**    | 300 KB | 13     | ✅     |
+| `/customers/import`    | **267.0 KB**    | 300 KB | 13     | ✅     |
+| `/system/crm-fields`   | **265.8 KB**    | 300 KB | 13     | ✅     |
+| `/conversion/forms`    | **193.5 KB**    | 300 KB | 11     | ✅     |
+| `/f/<key>` (public)    | **191.2 KB**    | 200 KB | 11     | ✅     |
+
+### ⚠️ The two Stage 3 numbers to read carefully
+
+**`/f/<key>` at 191.2 KB is 95% of its budget**, and it is the only route in the
+product that renders on a **customer's website**, inside an iframe, competing
+with their Lighthouse score.
+
+It carries no shell, no navigation and no session — the 191 KB is React, the
+Next.js runtime and the form itself. That is the floor for a React page in this
+application, which means **the budget cannot absorb another feature**. If the
+public form needs to grow, the honest answer is not a larger budget: it is that
+this one route should not be a React page at all.
+
+The gate is set at 200 KB rather than 250 so that conversation happens on the
+commit that causes it.
+
+`/conversion/forms` at 193.5 KB behaves as expected — a server-rendered list
+with one client component for the create dialog.
 
 | Constraint                         | Result                |
 | ---------------------------------- | --------------------- |
@@ -39,6 +59,40 @@ matching typical CDN defaults.
 | 3D lattice chunk (lazy)            | 228.9 KB gzip         |
 | Font network payload               | 0 bytes (self-hosted) |
 | Texture payload in the 3D scene    | 0 bytes               |
+
+### The public scripts, which are budgeted separately
+
+**Command:** `npm run build:public-scripts`
+
+| Script     | Raw     | Gzip      | Budget  | Status |
+| ---------- | ------- | --------- | ------- | ------ |
+| `embed.js` | 1,010 B | **632 B** | 2,048 B | ✅     |
+| `track.js` | 1,351 B | **708 B** | 3,072 B | ✅     |
+
+Their own build, their own budget, enforced by the build script itself, because
+these are the only Growth OS code that executes on **someone else's domain**.
+Nobody notices 40 KB in a dashboard; everybody notices it on a marketing site.
+
+No React, no framework, no shared imports — a shared import is how a 600-byte
+loader quietly acquires a dependency tree.
+
+### Change in Stage 3, and what it means
+
+| Route                 | Stage 2.5 | Stage 3  | Δ           |
+| --------------------- | --------- | -------- | ----------- |
+| `/login`              | 259.3 KB  | 260.2 KB | **+0.9 KB** |
+| `/dashboard`          | 264.5 KB  | 265.3 KB | **+0.8 KB** |
+| `/customers/contacts` | 265.8 KB  | 266.7 KB | **+0.9 KB** |
+
+An entire subsystem — forms, versioning, publishing, the public endpoint, the
+embed, attribution and a background worker — added **under a kilobyte** to every
+existing route. The reason is structural rather than clever: none of it is
+client code. The services are server-only, the worker is a different process,
+and the two scripts that do run in a browser run on someone else's page and are
+measured above.
+
+The ~0.9 KB that did arrive is the navigation entry for the new Conversion
+section, which every route's shell includes.
 
 ### Change in Stage 2.5, and what it means
 

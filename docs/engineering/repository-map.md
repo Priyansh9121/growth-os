@@ -196,6 +196,74 @@ non-owner role.
 
 ---
 
+## `packages/forms/` — Stage 3
+
+**Purpose:** Lead capture — web properties, form configuration and versioning,
+and the public submission path.
+
+**Why separate:** it owns the product's first ANONYMOUS PUBLIC WRITE PATH, and
+that surface deserves to be reviewable on its own. It is also the template every
+future channel follows: voice, ads webhooks and the public API will each be an
+adapter in front of the same ingestion boundary.
+
+**Contains:** `shared/` (forms context, origin normalisation) · `sites/` (web
+properties, shared with the Stage 4 crawler) · `forms/` (admin CRUD, versioning,
+publishing) · `public/` (form resolution, abuse controls, the submission
+service, submission receipts) · `tracking/` (attribution sanitisation).
+
+**May depend on:** `@growth-os/contracts`, `@growth-os/crm`,
+`@growth-os/database`, `drizzle-orm`, `zod`, `node:crypto`.
+
+**Must NOT:** import `@growth-os/auth` (cycle), `@growth-os/ui`, React, Next.js,
+anything in `apps/`, or `node:fs`. **Insert a CRM row** — contacts, acquisitions
+and opportunities belong to `ingestAcquisition`.
+
+**Security boundary:** the browser never selects a tenant; a public key resolves
+to exactly one workspace through one narrow `SECURITY DEFINER` function
+(ADR-0026). Public ingestion runs under a system grant of exactly
+`workspace:crm:contacts:write` (ADR-0025). A browser cannot state `sourceType`,
+`confidence` or `searchQuery` — none is in the submission schema. No raw payload
+is ever stored.
+
+**Testing:** unit tests over the pure decisions (classification, origin
+matching, value mapping, abuse signals) mostly as negatives; integration tests
+against a real database as a **restricted non-owner role** covering tenant
+isolation, idempotency under retry, and the full submission → CRM path.
+
+---
+
+## `apps/worker/` — Stage 3
+
+**Purpose:** Background jobs — scheduled retention now, crawling from Stage 4.
+
+**Why separate:** a long-running loop should not live inside a request handler.
+It is a second **process**, not a second service: same repository, same packages,
+same database, same deployment artefact, and **no network API between it and the
+web app**.
+
+**Contains:** `queue.ts` (claim, complete, fail, reclaim, schedule) ·
+`jobs.ts` (the registered handlers) · `main.ts` (the loop and its lifecycle).
+
+**May depend on:** `@growth-os/contracts`, `@growth-os/database`,
+`@growth-os/auth`, `@growth-os/forms`, `drizzle-orm`.
+
+**Must NOT:** import React, Next.js, `@growth-os/ui` or `apps/web`. Expose an
+HTTP server. Carry PII in a job payload.
+
+**Security boundary:** it connects as an operational role and does
+platform-wide work, so the jobs it runs today are outside the tenant
+transaction model. **Any future job touching customer data must open a
+`withTenantTransaction`** for the workspace it acts on.
+
+**⚠️ It owns the process-wide database pool** and is the only entry point that
+closes it — see ADR-0030 and `architecture/worker-architecture.md`.
+
+**Testing:** integration tests against a real database covering scheduling,
+dedupe, concurrent claiming through `SKIP LOCKED`, retry and terminal failure,
+stalled reclaim, and the four database-lifecycle properties.
+
+---
+
 ## `packages/ui/`
 
 **Purpose:** The design system — tokens, motion tokens and accessible React
