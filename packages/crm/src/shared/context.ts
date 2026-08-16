@@ -41,12 +41,35 @@ export interface CrmDependencies {
   readonly now?: () => Date;
 }
 
+/**
+ * An automated caller with no human behind it.
+ *
+ * Capabilities come from an explicit LIST, not from a workspace role. The
+ * public form path holds exactly `['workspace:crm:contacts:write']` — the
+ * weakest ROLE that carries that capability is `member`, which also carries
+ * four others it would never need (ADR-0025 §1).
+ */
+export interface SystemGrant {
+  /** Opaque, for the audit trail. `public_form:<formId>`. Never PII. */
+  readonly label: string;
+  readonly capabilities: readonly Capability[];
+}
+
 export interface CrmContext {
   readonly deps: CrmDependencies;
   /** Proof that the caller was authorized for this workspace. */
   readonly tenant: TenantActor;
   /** Ties every write back to the originating request and the audit trail. */
   readonly correlationId: string | null;
+  /**
+   * Present when this is an automated system path (a public form submission).
+   *
+   * Changes two things and nothing else: capabilities resolve through the
+   * grant rather than the workspace role, and `actorUserId` refuses to answer
+   * because there is no user. Tenancy is untouched — a system context still
+   * runs inside `withTenantTransaction` under the same forced RLS.
+   */
+  readonly system?: SystemGrant | undefined;
 }
 
 export function contextNow(context: CrmContext): Date {
@@ -57,8 +80,40 @@ export function workspaceId(context: CrmContext): string {
   return context.tenant.workspace.workspaceId;
 }
 
+/**
+ * The acting user's id.
+ *
+ * ⚠️ THROWS on a system context. Not returns null, not returns a sentinel.
+ *
+ * A system path has no user, and every alternative is worse: a sentinel writes
+ * a foreign key that does not exist, and returning null silently makes every
+ * existing call site "system-compatible" without anyone checking whether it
+ * actually is — surfacing months later as a NULL in a column somebody assumed
+ * was populated.
+ *
+ * Throwing means a service reached from a system path that has not been
+ * reviewed for it stops at the call, loudly, instead of improvising. Use
+ * `actorUserIdOrNull` where a null is genuinely correct (ADR-0025 §2).
+ */
 export function actorUserId(context: CrmContext): string {
+  if (context.system) {
+    throw new Error(
+      `actorUserId called on the system context "${context.system.label}". ` +
+        'A system path has no user; use actorUserIdOrNull if NULL is correct here, ' +
+        'or review this service for system safety (ADR-0025).',
+    );
+  }
   return context.tenant.actor.userId;
+}
+
+/**
+ * The acting user's id, or `null` for a system path.
+ *
+ * Used where a column records "who did this" and the honest answer for an
+ * automated write is "no user did".
+ */
+export function actorUserIdOrNull(context: CrmContext): string | null {
+  return context.system ? null : context.tenant.actor.userId;
 }
 
 /**
@@ -71,6 +126,29 @@ export function actorUserId(context: CrmContext): string {
  * @throws AuthorizationError
  */
 export function requireCapability(context: CrmContext, capability: Capability): void {
+  // A SYSTEM PATH RESOLVES THROUGH ITS GRANT, never through a role.
+  //
+  // The grant is an explicit list, so an automated caller holds exactly what it
+  // was given. If a bug ever routed a public submission into `eraseContact`,
+  // this refuses it — a materially different property from "the code happens
+  // not to call that function" (ADR-0025 §1).
+  if (context.system) {
+    if (!context.system.capabilities.includes(capability)) {
+      throw new AuthorizationError(
+        `System actor ${context.system.label} lacks ${capability} in workspace ${workspaceId(context)}`,
+        {
+          details: {
+            systemActor: context.system.label,
+            workspaceId: workspaceId(context),
+            capability,
+            granted: [...context.system.capabilities],
+          },
+        },
+      );
+    }
+    return;
+  }
+
   if (!workspaceRoleHasCapability(context.tenant.workspace.role, capability)) {
     throw new AuthorizationError(
       `User ${actorUserId(context)} lacks ${capability} in workspace ${workspaceId(context)}`,

@@ -133,6 +133,24 @@ export const CAPABILITIES = [
   'workspace:crm:tasks:write',
   'workspace:crm:activities:read',
 
+  /**
+   * Lead capture (Stage 3).
+   *
+   * Separate from the CRM capabilities on purpose. A form is a PUBLIC surface
+   * on a customer's website: publishing one exposes an endpoint to the open
+   * internet, and that is a different act from editing a contact. Folding it
+   * into `crm:contacts:write` would mean anyone who can fix a typo can also
+   * put a form on the public web.
+   *
+   * `sites:manage` is separate again, because a web property is shared with
+   * the Stage 4 crawler and Search Console later — registering one is a claim
+   * about what the business owns, not a form setting.
+   */
+  'workspace:forms:read',
+  'workspace:forms:manage',
+  'workspace:sites:read',
+  'workspace:sites:manage',
+
   // Agency scope
   'agency:read',
   'agency:update',
@@ -157,6 +175,24 @@ const VIEWER_CAPABILITIES = [
   'workspace:crm:opportunities:read',
   'workspace:crm:tasks:read',
   'workspace:crm:activities:read',
+
+  /**
+   * Lead capture (Stage 3).
+   *
+   * Separate from the CRM capabilities on purpose. A form is a PUBLIC surface
+   * on a customer's website: publishing one exposes an endpoint to the open
+   * internet, and that is a different act from editing a contact. Folding it
+   * into `crm:contacts:write` would mean anyone who can fix a typo can also
+   * put a form on the public web.
+   *
+   * `sites:manage` is separate again, because a web property is shared with
+   * the Stage 4 crawler and Search Console later — registering one is a claim
+   * about what the business owns, not a form setting.
+   */
+  'workspace:forms:read',
+  'workspace:forms:manage',
+  'workspace:sites:read',
+  'workspace:sites:manage',
 ] as const satisfies readonly Capability[];
 
 /** A day-to-day operator: reads and writes operational data. */
@@ -199,6 +235,10 @@ const ADMIN_CAPABILITIES = [
   'workspace:crm:contacts:import',
   'workspace:crm:tags:manage',
   'workspace:crm:custom_fields:manage',
+  // Publishing a form opens a public endpoint on the internet, and registering
+  // a site is a claim about what the business owns. Both are administrative.
+  'workspace:forms:manage',
+  'workspace:sites:manage',
 ] as const satisfies readonly Capability[];
 
 const OWNER_CAPABILITIES = [

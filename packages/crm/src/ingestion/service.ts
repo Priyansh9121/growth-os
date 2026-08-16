@@ -39,7 +39,7 @@ import {
 import { schemaTables, type TenantTransaction } from '@growth-os/database';
 import { displayName, normaliseEmail, normalisePhone } from '../identity/normalise';
 import {
-  actorUserId,
+  actorUserIdOrNull,
   contextNow,
   inTenant,
   requireCapability,
@@ -358,7 +358,7 @@ async function createContactRow(
       // assigning one arbitrarily makes an assignment rule look like a
       // decision somebody made.
       ownerUserId: null,
-      createdByUserId: actorUserId(context),
+      createdByUserId: actorUserIdOrNull(context),
       createdAt: derived.now,
       updatedAt: derived.now,
     })
@@ -421,7 +421,7 @@ async function findOrCreateCompany(
     .values({
       workspaceId: workspace,
       name: trimmed,
-      createdByUserId: actorUserId(context),
+      createdByUserId: actorUserIdOrNull(context),
       createdAt: now,
       updatedAt: now,
     })
@@ -460,7 +460,7 @@ async function createOpportunityRow(
       // acquisition that produced it later, by inference, is exactly the guess
       // the provenance model exists to avoid.
       acquisitionId,
-      createdByUserId: actorUserId(context),
+      createdByUserId: actorUserIdOrNull(context),
       createdAt: now,
       updatedAt: now,
     })

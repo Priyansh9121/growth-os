@@ -1,0 +1,20 @@
+{
+  "name": "@growth-os/forms",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lead capture: web properties, form configuration and versioning, and the public submission path that feeds the canonical CRM ingestion service.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@growth-os/contracts": "*",
+    "@growth-os/crm": "*",
+    "@growth-os/database": "*",
+    "drizzle-orm": "^0.45.2",
+    "zod": "^4.4.3"
+  }
+}

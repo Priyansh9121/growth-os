@@ -50,6 +50,13 @@
       "when": 1786775253044,
       "tag": "0006_activities_actor_cascade",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786855333957,
+      "tag": "0007_lead_capture",
+      "breakpoints": true
     }
   ]
 }

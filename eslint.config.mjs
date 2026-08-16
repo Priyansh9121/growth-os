@@ -274,6 +274,50 @@ export default tseslint.config(
     },
   },
 
+  // packages/forms owns the product's first ANONYMOUS PUBLIC WRITE PATH, so its
+  // boundaries matter more than most. Same rules as the CRM, plus the CRM
+  // itself as an allowed dependency — forms calls `ingestAcquisition` and must
+  // never reimplement it.
+  {
+    files: ['packages/forms/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            { name: 'next', message: 'Domain packages must not depend on Next.js.' },
+            { name: 'react', message: 'Domain packages must not depend on React.' },
+            {
+              name: 'node:fs',
+              message:
+                'Lead capture must never touch the filesystem. Same rule as the CRM (ADR-0023 §6).',
+            },
+            {
+              name: 'node:fs/promises',
+              message: 'Lead capture must never touch the filesystem.',
+            },
+            { name: 'fs', message: 'Lead capture must never touch the filesystem.' },
+          ],
+          patterns: [
+            {
+              group: ['@growth-os/auth', '@growth-os/auth/*', '@growth-os/ui', '@growth-os/ui/*'],
+              message:
+                'packages/forms may depend on contracts, crm and database only. Importing auth would create a cycle.',
+            },
+            {
+              group: ['next/*'],
+              message: 'Domain packages must not depend on Next.js.',
+            },
+            {
+              group: ['../../*', '**/apps/**'],
+              message: 'Imports must not escape the package directory.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Apps are runtime hosts: any package, never another app.
   {
     files: ['apps/**/*.{ts,tsx}'],
