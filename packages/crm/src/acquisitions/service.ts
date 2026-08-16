@@ -28,6 +28,7 @@ import {
 import { schemaTables, type TenantTransaction } from '@growth-os/database';
 import {
   actorUserId,
+  actorUserIdOrNull,
   contextNow,
   inTenant,
   loadInTenant,
@@ -117,8 +118,11 @@ export async function insertAcquisition(
     workspaceId: workspace,
     occurredAt: capturedAt.toISOString(),
     correlationId: context.correlationId,
-    actorType: 'user',
-    actorUserId: actorUserId(context),
+    // Follows the context, like the timeline entry above. An event claiming a
+    // `user` recorded a public form submission would be wrong in the one place
+    // subscribers cannot check it.
+    actorType: context.system ? 'system' : 'user',
+    actorUserId: actorUserIdOrNull(context),
     acquisitionId: row.id,
     contactId: input.contactId,
     sourceType: provenance.sourceType,

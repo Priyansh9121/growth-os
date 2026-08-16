@@ -32,7 +32,7 @@ import { schemaTables, type TenantTransaction } from '@growth-os/database';
 import { displayName } from '../identity/normalise';
 import { decodeCursor, sliceToPage } from '../shared/pagination';
 import {
-  actorUserId,
+  actorUserIdOrNull,
   contextNow,
   inTenant,
   requireCapability,
@@ -77,9 +77,19 @@ export async function recordActivity(
       contactId: input.contactId ?? null,
       opportunityId: input.opportunityId ?? null,
       acquisitionId: input.acquisitionId ?? null,
-      actorType: input.actorType ?? 'user',
-      // A `system`- or `agent`-authored activity has no acting user.
-      actorUserId: input.actorType && input.actorType !== 'user' ? null : actorUserId(context),
+      // THE DEFAULT ACTOR TYPE FOLLOWS THE CONTEXT.
+      //
+      // `user` is right for an operator and wrong for a public form
+      // submission: an automated write attributed to a "user" actor makes the
+      // timeline claim a person did something nobody did. A caller may still
+      // state `agent` or `automation` explicitly.
+      actorType: input.actorType ?? (context.system ? 'system' : 'user'),
+      // A `system`-, `agent`- or `automation`-authored activity has no acting
+      // user. `actorUserIdOrNull` is used rather than `actorUserId` because a
+      // system context has no user id AT ALL — the throwing accessor found
+      // this call site during Stage 3, which is what it exists for.
+      actorUserId:
+        input.actorType && input.actorType !== 'user' ? null : actorUserIdOrNull(context),
       metadata: input.metadata ?? null,
       occurredAt: input.occurredAt ?? contextNow(context),
     })

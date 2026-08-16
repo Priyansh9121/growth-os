@@ -175,24 +175,10 @@ const VIEWER_CAPABILITIES = [
   'workspace:crm:opportunities:read',
   'workspace:crm:tasks:read',
   'workspace:crm:activities:read',
-
-  /**
-   * Lead capture (Stage 3).
-   *
-   * Separate from the CRM capabilities on purpose. A form is a PUBLIC surface
-   * on a customer's website: publishing one exposes an endpoint to the open
-   * internet, and that is a different act from editing a contact. Folding it
-   * into `crm:contacts:write` would mean anyone who can fix a typo can also
-   * put a form on the public web.
-   *
-   * `sites:manage` is separate again, because a web property is shared with
-   * the Stage 4 crawler and Search Console later — registering one is a claim
-   * about what the business owns, not a form setting.
-   */
+  // A viewer SEES which forms exist and how they are performing. Publishing
+  // one opens an endpoint on the public internet, which is administrative.
   'workspace:forms:read',
-  'workspace:forms:manage',
   'workspace:sites:read',
-  'workspace:sites:manage',
 ] as const satisfies readonly Capability[];
 
 /** A day-to-day operator: reads and writes operational data. */

@@ -141,6 +141,14 @@ export async function consumePublicRateLimit(
       const windowStart = new Date(
         Math.floor(now.getTime() / (rule.windowSeconds * 1000)) * rule.windowSeconds * 1000,
       );
+      // ⚠️ An ISO STRING with an explicit cast, not the Date.
+      //
+      // Drizzle's typed builders serialise a `Date` correctly; a raw `sql`
+      // template does NOT — postgres.js binds it and the driver throws
+      // "argument must be of type string". Third occurrence of this class in
+      // the codebase, after `= any(${jsArray})` twice, and it is always found
+      // at runtime rather than by the type system.
+      const windowStartParam = windowStart.toISOString();
 
       // Upsert-and-read in one statement. A read-then-write races under
       // exactly the concurrent traffic a rate limiter exists for.
@@ -155,7 +163,7 @@ export async function consumePublicRateLimit(
           target: publicSubmissionLimits.subjectHash,
           set: {
             count: sql`case
-              when ${publicSubmissionLimits.windowStartedAt} < ${windowStart} then 1
+              when ${publicSubmissionLimits.windowStartedAt} < ${windowStartParam}::timestamptz then 1
               else ${publicSubmissionLimits.count} + 1 end`,
             windowStartedAt: windowStart,
           },
