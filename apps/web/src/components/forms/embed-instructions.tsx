@@ -14,7 +14,7 @@
 
 import { useState } from 'react';
 import { Badge, Surface } from '@growth-os/ui';
-import type { FormStatus } from '@growth-os/contracts';
+import { EMBED_SCRIPT_PATH, TRACKING_SCRIPT_PATH, type FormStatus } from '@growth-os/contracts';
 
 export function EmbedInstructions({
   publicKey,
@@ -26,7 +26,16 @@ export function EmbedInstructions({
   status: FormStatus;
 }) {
   const hostedUrl = `${appUrl}/f/${publicKey}`;
-  const snippet = `<script src="${appUrl}/embed.js" data-growth-form="${publicKey}"></script>`;
+  // ⚠️ `/scripts/embed.js`, matching where `build-public-scripts` writes it.
+  // This string said `/embed.js` until a browser test pasted it into a stand-in
+  // customer page and got no form: the snippet an operator copies has to be the
+  // URL that is actually served, and nothing but an end-to-end test compares
+  // the two.
+  const snippet = `<script src="${appUrl}${EMBED_SCRIPT_PATH}" data-growth-form="${publicKey}"></script>`;
+  // Deliberately separate, and marked optional. The form works without it; the
+  // tracker is what makes a campaign visible when the visitor lands on one page
+  // and enquires from another.
+  const tracker = `<script src="${appUrl}${TRACKING_SCRIPT_PATH}" async></script>`;
 
   return (
     <section aria-labelledby="embed-heading" className="flex flex-col gap-3">
@@ -52,10 +61,21 @@ export function EmbedInstructions({
           description="Paste this where the form should appear. It loads in a sandboxed frame, so your site's styles and ours cannot affect each other."
           value={snippet}
         />
+        <Copyable
+          label="Attribution snippet (optional)"
+          description="Add this once, on every page. It records which campaign or search brought a visitor to your site, so an enquiry sent from your contact page is still credited to the page they arrived on."
+          value={tracker}
+        />
         <p className="text-caption text-text-subtle">
-          The snippet adds under 1 KB to your page. If your site blocks external scripts, use the
-          direct link above in an <code className="font-mono">iframe</code> instead — the form works
-          identically, it just will not resize itself.
+          Together the two snippets add under 2 KB. Neither sets a cookie, and the attribution one
+          sends nothing anywhere — it writes a single value that is forgotten when the visitor
+          closes the tab. Without it, enquiries are still captured; they are simply credited to the
+          page the form is on.
+        </p>
+        <p className="text-caption text-text-subtle">
+          If your site blocks external scripts, use the direct link above in an{' '}
+          <code className="font-mono">iframe</code> instead — the form works identically, it just
+          will not resize itself.
         </p>
       </Surface>
     </section>
