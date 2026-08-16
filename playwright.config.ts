@@ -105,6 +105,26 @@ export default defineConfig({
        * response is indistinguishable from a wrong password.
        */
       RATE_LIMIT_LOGIN_MAX: '500',
+
+      /**
+       * Raised for the same reason, and discovered the same way.
+       *
+       * The public submission defaults (5/h per IP+form, 20/h per IP, 5 per 10s
+       * burst) are a PRODUCTION control, and the first full lead-capture run
+       * proved they work: the headline test passed, then the sixth submission
+       * of the suite was refused and every subsequent test failed at its
+       * success message. All 25 tests share one loopback address and one seeded
+       * form, which is precisely the pattern the per-IP-per-form limit exists
+       * to stop.
+       *
+       * The limits themselves are covered where they can be asserted
+       * deterministically — `packages/forms` integration tests drive the
+       * counter to its ceiling and check that the refusal is indistinguishable
+       * from every other rejection.
+       */
+      PUBLIC_SUBMISSION_MAX_PER_IP_FORM: '500',
+      PUBLIC_SUBMISSION_MAX_PER_IP: '500',
+      PUBLIC_SUBMISSION_BURST_MAX: '500',
     },
   },
 });

@@ -8,7 +8,13 @@ import 'server-only';
  * different challenge provider, or a different notion of "our own origin".
  */
 
-import { NoChallengeVerifier, type FormsContext, type SubmitDependencies } from '@growth-os/forms';
+import {
+  NoChallengeVerifier,
+  PUBLIC_LIMITS,
+  type FormsContext,
+  type PublicRateLimits,
+  type SubmitDependencies,
+} from '@growth-os/forms';
 import type { Actor, WorkspaceAccess } from '@growth-os/contracts';
 import { getDependencies } from '../dependencies';
 import { getEventPublisher } from '../crm-context';
@@ -31,6 +37,24 @@ export function getSubmitDependencies(): SubmitDependencies {
     // From configuration, never from the request Host header — a first-party
     // origin derived from a caller-supplied header is not a check.
     appUrl: deps.env.APP_URL,
+    limits: {
+      perIpPerForm: {
+        max: deps.env.PUBLIC_SUBMISSION_MAX_PER_IP_FORM,
+        windowSeconds: PUBLIC_LIMITS.perIpPerForm.windowSeconds,
+      },
+      perIp: {
+        max: deps.env.PUBLIC_SUBMISSION_MAX_PER_IP,
+        windowSeconds: PUBLIC_LIMITS.perIp.windowSeconds,
+      },
+      perForm: {
+        max: deps.env.PUBLIC_SUBMISSION_MAX_PER_FORM,
+        windowSeconds: PUBLIC_LIMITS.perForm.windowSeconds,
+      },
+      burst: {
+        max: deps.env.PUBLIC_SUBMISSION_BURST_MAX,
+        windowSeconds: PUBLIC_LIMITS.burst.windowSeconds,
+      },
+    } satisfies PublicRateLimits,
   };
 }
 

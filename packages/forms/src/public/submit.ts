@@ -43,6 +43,7 @@ import { withTenantTransaction } from '@growth-os/database';
 import {
   consumePublicRateLimit,
   evaluateAbuseSignals,
+  type PublicRateLimits,
   type SubmissionChallengeVerifier,
 } from './abuse';
 import { honeypotKeyFor } from './honeypot';
@@ -61,6 +62,8 @@ export interface SubmitDependencies {
   readonly challenge: SubmissionChallengeVerifier;
   /** The application's own origin. Always permitted, for the hosted form. */
   readonly appUrl: string;
+  /** Omitted means `PUBLIC_LIMITS`. Supplied by the composition root. */
+  readonly limits?: PublicRateLimits;
   readonly now?: () => Date;
 }
 
@@ -175,6 +178,7 @@ export async function submitPublicForm(
     ipAddress: request.ipAddress,
     formId: form.formId,
     now,
+    ...(deps.limits ? { limits: deps.limits } : {}),
   });
   if (!limit.allowed) return reject('rate_limited');
 

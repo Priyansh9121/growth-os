@@ -39,14 +39,29 @@ export interface RateLimitRule {
   readonly windowSeconds: number;
 }
 
+export interface PublicRateLimits {
+  readonly perIpPerForm: RateLimitRule;
+  readonly perIp: RateLimitRule;
+  readonly perForm: RateLimitRule;
+  readonly burst: RateLimitRule;
+}
+
 /**
- * The public submission limits.
+ * The DEFAULT public submission limits.
  *
  * Chosen against what a real business actually receives. A busy plumber gets
  * perhaps twenty enquiries a day; a form receiving 200 in an hour is either
  * viral or under attack, and both deserve a look. The per-IP limit is much
  * tighter because one household submitting twenty enquiries an hour to one form
  * is not a household.
+ *
+ * ⚠️ These are DEFAULTS, not constants. The composition root may raise them
+ * from the environment — the same arrangement `RATE_LIMIT_LOGIN_MAX` already
+ * has, and for the same reason: the E2E suite drives many more submissions from
+ * one loopback address in two minutes than any real visitor does, and the limit
+ * tripping there is evidence it works rather than a reason to weaken it in
+ * production. Nothing reads the environment inside this package; the numbers
+ * arrive as an argument.
  */
 export const PUBLIC_LIMITS = {
   /** One address, one form. The tightest, and the one spam hits first. */
@@ -55,7 +70,9 @@ export const PUBLIC_LIMITS = {
   perIp: { max: 20, windowSeconds: 3600 },
   /** One form from everywhere. Catches a distributed flood. */
   perForm: { max: 200, windowSeconds: 3600 },
-} as const satisfies Record<string, RateLimitRule>;
+  /** In-process burst. 5 in 10 seconds from one address — nobody types that fast. */
+  burst: { max: 5, windowSeconds: 10 },
+} as const satisfies PublicRateLimits;
 
 /**
  * The burst tier: in-process, no I/O.
@@ -91,10 +108,6 @@ class BurstLimiter {
 
 const burst = new BurstLimiter();
 
-/** 5 submissions per 10 seconds from one address. A human cannot type that fast. */
-const BURST_MAX = 5;
-const BURST_WINDOW_MS = 10_000;
-
 /**
  * Hash a rate-limit subject.
  *
@@ -119,20 +132,25 @@ export interface RateLimitVerdict {
  */
 export async function consumePublicRateLimit(
   db: Database,
-  input: { ipAddress: string; formId: string; now: Date },
+  input: { ipAddress: string; formId: string; now: Date; limits?: PublicRateLimits },
 ): Promise<RateLimitVerdict> {
   const { ipAddress, formId, now } = input;
+  const limits = input.limits ?? PUBLIC_LIMITS;
 
   // Tier 1: burst, in memory, before any I/O.
-  if (!burst.allow(`${ipAddress}:${formId}`, BURST_MAX, BURST_WINDOW_MS, now.getTime())) {
-    return { allowed: false, scope: 'burst' };
-  }
+  const allowed = burst.allow(
+    `${ipAddress}:${formId}`,
+    limits.burst.max,
+    limits.burst.windowSeconds * 1000,
+    now.getTime(),
+  );
+  if (!allowed) return { allowed: false, scope: 'burst' };
 
   // Tier 2: durable, shared across instances and across restarts.
   const checks: readonly (readonly [string, string, RateLimitRule])[] = [
-    ['ip_form', `${ipAddress}|${formId}`, PUBLIC_LIMITS.perIpPerForm],
-    ['ip', ipAddress, PUBLIC_LIMITS.perIp],
-    ['form', formId, PUBLIC_LIMITS.perForm],
+    ['ip_form', `${ipAddress}|${formId}`, limits.perIpPerForm],
+    ['ip', ipAddress, limits.perIp],
+    ['form', formId, limits.perForm],
   ];
 
   return withUnscopedTransaction(db, async (tx) => {

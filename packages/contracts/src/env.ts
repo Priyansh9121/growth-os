@@ -78,6 +78,23 @@ const baseEnvSchema = z.object({
   RATE_LIMIT_LOGIN_MAX: positiveInt(8),
   RATE_LIMIT_LOGIN_WINDOW_SECONDS: positiveInt(900),
 
+  /**
+   * Public form submission limits, per hour, plus the in-process burst tier.
+   *
+   * Configuration rather than constants for two honest reasons: a customer
+   * running a genuinely high-traffic campaign will exceed 200 an hour on one
+   * form, and the E2E suite drives far more submissions from one loopback
+   * address in two minutes than any visitor does.
+   *
+   * `positiveInt` means these can be RAISED or LOWERED but never set to zero or
+   * disabled — there is no value of this configuration that turns the limiter
+   * off, which is the property that makes it configuration and not a switch.
+   */
+  PUBLIC_SUBMISSION_MAX_PER_IP_FORM: positiveInt(5),
+  PUBLIC_SUBMISSION_MAX_PER_IP: positiveInt(20),
+  PUBLIC_SUBMISSION_MAX_PER_FORM: positiveInt(200),
+  PUBLIC_SUBMISSION_BURST_MAX: positiveInt(5),
+
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
   LOG_FORMAT: z.enum(['json', 'pretty']).default('pretty'),
 
