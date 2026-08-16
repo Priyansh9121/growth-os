@@ -17,13 +17,33 @@
 
 import { build } from 'esbuild';
 import { gzipSync } from 'node:zlib';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const srcDir = resolve(repoRoot, 'apps/web/scripts');
+
+/**
+ * ⚠️ MUST MATCH `EMBED_SCRIPT_PATH` and `TRACKING_SCRIPT_PATH` in
+ * `packages/contracts/src/forms/public-scripts.ts`, which is what the snippet
+ * an operator copies is built from. This file cannot import TypeScript, so the
+ * agreement is proved by the embed E2E test rather than by the type system —
+ * and it needed proving: the snippet advertised `/embed.js` for a whole stage
+ * while the build wrote `/scripts/embed.js`.
+ */
 const outDir = resolve(repoRoot, 'apps/web/public/scripts');
+
+/**
+ * Staged sources go to a TEMPORARY directory, never to `public/`.
+ *
+ * They used to be written beside the output as `.embed.js.staged.js` and never
+ * removed — which meant an unminified copy of both scripts, comments and all,
+ * was served to anyone who asked for it. Nothing in `public/` is private, so
+ * nothing that is not deliberately published belongs there.
+ */
+const stageDir = mkdtempSync(resolve(tmpdir(), 'growth-os-public-scripts-'));
 
 /**
  * Budgets in GZIPPED bytes.
@@ -52,7 +72,7 @@ for (const [name, budget] of Object.entries(BUDGETS)) {
   // script that discovered its own origin from `document.currentScript.src`
   // would follow a customer's CDN rewrite to wherever it pointed.
   const withOrigin = readFileSync(source, 'utf8').replaceAll('__GROWTH_OS_ORIGIN__', APP_URL);
-  const staged = resolve(outDir, `.${name}.staged.js`);
+  const staged = resolve(stageDir, name);
   writeFileSync(staged, withOrigin);
 
   const result = await build({
@@ -84,6 +104,8 @@ for (const [name, budget] of Object.entries(BUDGETS)) {
       `${String(gzip).padStart(5)} B gzip  (budget ${budget} B)`,
   );
 }
+
+rmSync(stageDir, { recursive: true, force: true });
 
 if (failed) {
   console.error('\nA public script exceeded its budget. These run on customer websites.');
