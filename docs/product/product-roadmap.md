@@ -2,7 +2,7 @@
 
 **Status:** Living document
 **Last reviewed:** 2026-08-16
-**Current stage:** Stage 3 — **in progress**
+**Current stage:** Stage 3 complete. **Stage 4 next.**
 
 > **⚠️ The stage order changed after Stage 2.5.** The crawler was Stage 3 and is
 > now Stage 4; Lead Capture was Stage 10 and is now Stage 3. The reasoning is
@@ -210,7 +210,7 @@ rankings produce has no loop to close.
 
 ---
 
-## Stage 3 — Lead capture & attribution ingestion 🔨
+## Stage 3 — Lead capture & attribution ingestion ✅
 
 **Objective:** Prove that a real, anonymous website visitor can become a
 truthfully attributed CRM lead through the same ingestion path every future
@@ -235,6 +235,29 @@ and cost amplification. Mitigations in
 parameters, submits, and an operator then sees the contact, the acquisition with
 truthful source classification, the opportunity, and the timeline entry — with a
 retried submission creating nothing further. Asserted end to end in a browser.
+
+**Met**, 2026-08-16. The evidence, so this is checkable rather than claimed:
+
+| Gate                             | Result                                                                 |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| Unit + integration               | **492 passing**, 22 files, integration against real PostgreSQL         |
+| Browser, both projects           | **71 passing**, of which 25 are Stage 3                                |
+| The headline test                | `lead-capture.spec.ts` — the full loop, anonymous to CRM               |
+| Retry creates nothing            | Asserted; a reused id with different content is refused                |
+| Isolation under a non-owner role | 21 workspace-owned tables ENABLE + FORCE, verified from migration zero |
+| Module boundaries                | 21 probes, including four the worker must not cross                    |
+| Bundle budgets                   | 10 routes; the public form at 191.2 KB against 200 KB                  |
+| `worker --once`                  | Exits naturally in ~1s, no `process.exit()`, gated in CI               |
+
+Six defects were found by the browser suite alone, four of them invisible to
+every layer below it — recorded in
+[development-log/0015](../development-log/0015-forms-admin-and-the-browser-suite.md).
+
+**Deliberately not built, and named rather than implied:** no CAPTCHA provider
+(the seam exists and its default is called `NoChallengeVerifier`); burst rate
+limiting is per application instance ([ADR-0009](../decisions/ADR-0009-rate-limiting.md));
+no workspace-level sites administration UI, which Stage 4 needs for a different
+reason and will build then.
 
 ---
 
