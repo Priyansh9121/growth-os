@@ -2,7 +2,7 @@
   "name": "growth-os",
   "version": "0.1.0",
   "private": true,
-  "description": "Growth OS \u2014 an AI growth operating system connecting SEO, CRM, AI agents, voice and revenue attribution into one loop.",
+  "description": "Growth OS — an AI growth operating system connecting SEO, CRM, AI agents, voice and revenue attribution into one loop.",
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
@@ -15,7 +15,7 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @growth-os/web",
-    "build": "npm run build --workspace @growth-os/web",
+    "build": "npm run build:public-scripts && npm run build --workspace @growth-os/web",
     "start": "npm run start --workspace @growth-os/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
@@ -39,7 +39,8 @@
     "verify:all": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run verify:boundaries && npm run verify:gitignore",
     "verify:boundaries": "node scripts/verify-boundaries.mjs",
     "e2e:ui": "playwright test --ui",
-    "verify:bundle": "node scripts/check-bundle-budget.mjs"
+    "verify:bundle": "node scripts/check-bundle-budget.mjs",
+    "build:public-scripts": "node scripts/build-public-scripts.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
@@ -53,6 +54,7 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
     "@vitest/coverage-v8": "^4.1.10",
+    "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.3.1",
     "globals": "^17.11.0",

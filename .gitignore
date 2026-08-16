@@ -185,3 +185,15 @@ desktop.ini
 *.dump
 *.sql.gz
 /dumps/
+
+# -----------------------------------------------------------------------------
+# Generated public scripts (Stage 3)
+# -----------------------------------------------------------------------------
+# `embed.js` and `track.js` are BUILT from tracked sources in
+# apps/web/scripts/*.src.js by `npm run build:public-scripts`, which bakes in
+# the deployment's origin. Committing the output would mean shipping a build
+# pointing at whichever origin the last developer happened to have configured.
+#
+# ⚠️ ANCHORED to the build directory. The SOURCES must stay trackable — a bare
+# `embed.js` rule would hide the file this product's embed is written in.
+/apps/web/public/scripts/

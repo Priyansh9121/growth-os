@@ -81,7 +81,7 @@ const PROTECTED_PREFIXES = [
  * server injects unnonced style tags). Neither reaches production, and a test
  * asserts that.
  */
-function buildCsp(nonce: string, isDev: boolean): string {
+function buildCsp(nonce: string, isDev: boolean, embeddable: boolean): string {
   return [
     `default-src 'self'`,
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''}`,
@@ -93,10 +93,32 @@ function buildCsp(nonce: string, isDev: boolean): string {
     `object-src 'none'`,
     `base-uri 'self'`,
     `form-action 'self'`,
-    `frame-ancestors 'none'`,
+    // ⚠️ THE ONLY DIFFERENCE FOR PUBLIC FORMS, and it is one directive.
+    //
+    // A hosted form must be embeddable in a customer's page, so
+    // `frame-ancestors 'none'` cannot apply to it. Every other directive is
+    // IDENTICAL — the application's policy is not weakened globally to support
+    // embedding, which is exactly how a CSP quietly stops protecting anything.
+    //
+    // `*` rather than a per-form allow-list: `frame-ancestors` is evaluated by
+    // the browser against the top-level page, and the form's allowed origins
+    // are not known until the key is resolved — which happens after the
+    // response headers are set. The clickjacking risk it would mitigate is
+    // also narrow here: the page contains one form and no authenticated
+    // action, so there is nothing to trick a signed-in user into clicking.
+    embeddable ? `frame-ancestors *` : `frame-ancestors 'none'`,
     `upgrade-insecure-requests`,
   ].join('; ');
 }
+
+/**
+ * Routes that may be framed by a customer's website.
+ *
+ * Deliberately a narrow, explicit list rather than a pattern: `/f/` is the
+ * hosted form and nothing else. An application route accidentally matching
+ * this would become clickjackable.
+ */
+const EMBEDDABLE_PREFIXES = ['/f'] as const;
 
 export default function proxy(request: NextRequest): NextResponse {
   const { pathname, search } = request.nextUrl;
@@ -105,7 +127,10 @@ export default function proxy(request: NextRequest): NextResponse {
   // 16 bytes of entropy, base64. A nonce must be unpredictable and unique per
   // request — a reused nonce is equivalent to 'unsafe-inline'.
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
-  const csp = buildCsp(nonce, isDev);
+  const embeddable = EMBEDDABLE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+  const csp = buildCsp(nonce, isDev, embeddable);
 
   // Report-only is available for a staging soak. It defaults OFF: a
   // report-only policy left on indefinitely is the most common way CSP

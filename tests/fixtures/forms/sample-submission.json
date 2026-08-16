@@ -1,0 +1,21 @@
+{
+  "_comment": "A fixture, not real data. Every value here is fictional — see docs/product/product-principles.md on never presenting demo values as measurements.",
+  "values": {
+    "first_name": "Priya",
+    "last_name": "Raman",
+    "email": "priya@example.test",
+    "phone": "0412 345 678",
+    "message": "Burst pipe under the kitchen sink, water is off at the main."
+  },
+  "submissionId": "0123456789abcdef0123456789abcdef",
+  "context": {
+    "landingPath": "/emergency-plumber",
+    "referrerOrigin": "https://www.google.com",
+    "utmSource": "google",
+    "utmMedium": "cpc",
+    "utmCampaign": "emergency-melbourne",
+    "gclid": "TeSt-ClIcK-iD-not-real",
+    "sessionId": "fixture0000000000000000",
+    "elapsedMs": 18400
+  }
+}

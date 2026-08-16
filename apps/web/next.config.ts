@@ -40,23 +40,48 @@ const config: NextConfig = {
    * protection. Tracked as a Stage 2 task in docs/security/threat-model.md.
    */
   async headers() {
+    /** Applied everywhere, including the public form. */
+    const universal = [
+      // Defence in depth against MIME-sniffing an upload into a script.
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      // Do not leak internal paths (which contain workspace IDs) to
+      // third-party sites the user navigates to.
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      // Deny powerful features the product does not use.
+      {
+        key: 'Permissions-Policy',
+        value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+      },
+    ];
+
     return [
       {
-        source: '/:path*',
+        /**
+         * ⚠️ EVERY PATH EXCEPT THE HOSTED FORM.
+         *
+         * `X-Frame-Options: DENY` and the embed are mutually exclusive: XFO is
+         * a header, not CSP, and browsers that honour it will refuse the frame
+         * regardless of what `frame-ancestors` says. Stage 3 found this the
+         * hard way — the embed would have been silently blank on every
+         * customer site.
+         *
+         * The exclusion is a NEGATIVE LOOKAHEAD on `/f`, so it is a deliberate
+         * carve-out for one route rather than a relaxation of the default. The
+         * hosted form still gets `frame-ancestors` from the proxy, which is
+         * the modern equivalent and the one browsers prefer.
+         */
+        source: '/:path((?!f/).*)',
         headers: [
-          // Defence in depth against MIME-sniffing an upload into a script.
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          // Clickjacking: no part of Growth OS is intended to be framed.
+          ...universal,
+          // Clickjacking: no part of Growth OS EXCEPT the public form is
+          // intended to be framed.
           { key: 'X-Frame-Options', value: 'DENY' },
-          // Do not leak internal paths (which contain workspace IDs) to
-          // third-party sites the user navigates to.
-          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          // Deny powerful features the product does not use.
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
-          },
         ],
+      },
+      {
+        // The hosted form: framing permitted, everything else identical.
+        source: '/f/:path*',
+        headers: universal,
       },
     ];
   },
