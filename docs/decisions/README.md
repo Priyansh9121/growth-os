@@ -104,3 +104,14 @@ ADRs, docs, code.
 | [0022](ADR-0022-custom-field-storage.md)        | Custom fields: typed definitions, relational values | Accepted              |
 | [0023](ADR-0023-csv-import.md)                  | CSV import: validate all, then write in chunks      | Accepted              |
 | [0024](ADR-0024-multi-factor-authentication.md) | MFA: TOTP first, passkeys next, SMS never           | Accepted, impl. gated |
+
+### Stage 3 — lead capture and attribution ingestion
+
+| ADR                                        | Title                                             | Status   |
+| ------------------------------------------ | ------------------------------------------------- | -------- |
+| [0025](ADR-0025-system-actors.md)          | System actors: capability grants without a user   | Accepted |
+| [0026](ADR-0026-public-form-resolution.md) | Resolving a public form to a tenant               | Accepted |
+| [0027](ADR-0027-embed-mechanism.md)        | Embed forms in an iframe, loaded by a tiny script | Accepted |
+| [0028](ADR-0028-attribution-storage.md)    | Browser attribution storage: sessionStorage only  | Accepted |
+| [0029](ADR-0029-web-properties.md)         | `sites`: one shared web-property model            | Accepted |
+| [0030](ADR-0030-worker-and-queue.md)       | A PostgreSQL-backed worker, and no Redis yet      | Accepted |
