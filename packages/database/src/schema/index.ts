@@ -10,3 +10,6 @@ export * from './tenancy';
 export * from './audit';
 export * from './crm';
 export * from './crm-lifecycle';
+export * from './sites';
+export * from './forms';
+export * from './jobs';

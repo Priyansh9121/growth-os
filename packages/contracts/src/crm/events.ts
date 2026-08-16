@@ -147,6 +147,38 @@ export interface ContactsImportedEvent extends DomainEventBase {
   readonly failedRows: number;
 }
 
+/**
+ * A public form submission was accepted.
+ *
+ * The hook Stage 13's automation will subscribe to for "notify the owner of a
+ * new lead" — which is deliberately NOT hardcoded inside the submission
+ * transaction, so a slow or failing notifier can never cost a lead.
+ *
+ * IDENTIFIERS ONLY. No name, no email, no phone, no message. A subscriber that
+ * needs the person loads them through a tenant-scoped service, which re-checks
+ * authorization.
+ */
+export interface FormSubmissionReceivedEvent extends DomainEventBase {
+  readonly name: 'forms.submission.received';
+  readonly formId: string;
+  readonly outcome: 'created' | 'duplicate';
+  readonly acquisitionId?: string;
+}
+
+/**
+ * A public form submission was refused.
+ *
+ * Carries the reason for OPERATIONAL visibility — an alert on a spike in
+ * rejections is a legitimate use. The reason is never disclosed to the
+ * submitter.
+ */
+export interface FormSubmissionRejectedEvent extends DomainEventBase {
+  readonly name: 'forms.submission.rejected';
+  readonly formId: string;
+  readonly outcome: 'rejected';
+  readonly reason?: string;
+}
+
 export type CrmDomainEvent =
   | ContactCreatedEvent
   | AcquisitionRecordedEvent
@@ -157,7 +189,9 @@ export type CrmDomainEvent =
   | AcquisitionIngestedEvent
   | ContactMergedEvent
   | ContactErasedEvent
-  | ContactsImportedEvent;
+  | ContactsImportedEvent
+  | FormSubmissionReceivedEvent
+  | FormSubmissionRejectedEvent;
 
 export type CrmDomainEventName = CrmDomainEvent['name'];
 
