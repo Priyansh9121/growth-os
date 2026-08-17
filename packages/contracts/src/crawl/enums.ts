@@ -28,13 +28,7 @@
  * `queued` is the default, so a crawl row that exists but was never picked up
  * reads as waiting rather than as finished-with-nothing.
  */
-export const CRAWL_STATUSES = [
-  'queued',
-  'running',
-  'completed',
-  'failed',
-  'cancelled',
-] as const;
+export const CRAWL_STATUSES = ['queued', 'running', 'completed', 'failed', 'cancelled'] as const;
 export type CrawlStatus = (typeof CRAWL_STATUSES)[number];
 
 export const CRAWL_STATUS_LABELS: Readonly<Record<CrawlStatus, string>> = {

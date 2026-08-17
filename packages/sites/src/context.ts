@@ -102,7 +102,9 @@ export function requireCapability(context: SitesContext, capability: Capability)
       : `User ${context.tenant.actor.userId} lacks ${capability} in workspace ${workspaceId(context)}`,
     {
       details: {
-        ...(context.system ? { system: context.system.label } : { userId: context.tenant.actor.userId }),
+        ...(context.system
+          ? { system: context.system.label }
+          : { userId: context.tenant.actor.userId }),
         workspaceId: workspaceId(context),
         capability,
       },

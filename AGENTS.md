@@ -37,7 +37,7 @@ This section outranks speed. It is the part that produces good work.
   rather than building on it.
 - **Prefer the cheap gate.** A test suite that runs in 1.3 s is a gate, not an
   investigation of last resort. Run it constantly.
-- **Report negative results.** *"Measured X, changed nothing because of it"* is a
+- **Report negative results.** _"Measured X, changed nothing because of it"_ is a
   complete and valuable outcome. Never manufacture a change to justify a step.
 - **Correct the brief when the brief is wrong.** A brief is a hypothesis about
   the work. If measurement contradicts it — wrong file count, wrong test target,
@@ -135,14 +135,14 @@ a workspace-owned table without RLS is incomplete.
 
 **Limits live in the database.** Budget ceilings, page caps and rate limits are
 CHECK constraints, not application validation. The test for a constraint is a row
-that must be *refused*.
+that must be _refused_.
 
 **Capability naming** follows `workspace:<resource>:<action>` exactly. Every new
 capability ships with a grant test proving each role gets what it should and
 nothing more.
 
-**Stage boundary — facts vs findings.** The crawler *acquires facts*. The audit
-layer *interprets them into findings*. `title = ""` is a fact. "Missing title,
+**Stage boundary — facts vs findings.** The crawler _acquires facts_. The audit
+layer _interprets them into findings_. `title = ""` is a fact. "Missing title,
 severity high" is a finding. **MUST NOT** put severity, scoring, recommendations
 or judgement in the crawl layer, however convenient.
 
@@ -208,8 +208,8 @@ Every session ends with a report stating:
 
 - **What was verified** — with the commands that produced the evidence
 - **What was built** — and which tests prove it
-- **What is unverified or unfinished** — plainly, without softening. *"I have not
-  reviewed this and would not trust it as-is"* is the correct register.
+- **What is unverified or unfinished** — plainly, without softening. _"I have not
+  reviewed this and would not trust it as-is"_ is the correct register.
 - **What is next** — the single next task, not a wishlist
 
 **MUST NOT** describe unreviewed code as complete. **MUST NOT** report a test

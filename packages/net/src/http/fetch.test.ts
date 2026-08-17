@@ -62,13 +62,16 @@ function sealed(table: Readonly<Record<string, readonly string[]>> = {}): SafeFe
 
 describe('safeFetch — the happy path exists', () => {
   it('fetches an ordinary public page', async () => {
-    const deps = network({ 'example.test': [PUBLIC_IP] }, {
-      'https://example.test/': {
-        status: 200,
-        headers: { 'content-type': 'text/html' },
-        body: '<html><title>Hi</title></html>',
+    const deps = network(
+      { 'example.test': [PUBLIC_IP] },
+      {
+        'https://example.test/': {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+          body: '<html><title>Hi</title></html>',
+        },
       },
-    });
+    );
 
     const outcome = await safeFetch(deps, 'https://example.test/');
 
@@ -85,9 +88,12 @@ describe('safeFetch — the happy path exists', () => {
   it('sends the site as the Host header, not the pinned address', async () => {
     // A virtual host serving 400 sites needs to know which one was asked for.
     // Pinning changes where the packets go; it must not change what is asked.
-    const deps = network({ 'example.test': [PUBLIC_IP] }, {
-      'https://example.test/': { status: 200, body: 'ok' },
-    });
+    const deps = network(
+      { 'example.test': [PUBLIC_IP] },
+      {
+        'https://example.test/': { status: 200, body: 'ok' },
+      },
+    );
 
     await safeFetch(deps, 'https://example.test/');
 
@@ -95,9 +101,12 @@ describe('safeFetch — the happy path exists', () => {
   });
 
   it('never sends a cookie', async () => {
-    const deps = network({ 'example.test': [PUBLIC_IP] }, {
-      'https://example.test/': { status: 200, body: 'ok' },
-    });
+    const deps = network(
+      { 'example.test': [PUBLIC_IP] },
+      {
+        'https://example.test/': { status: 200, body: 'ok' },
+      },
+    );
 
     await safeFetch(deps, 'https://example.test/');
 
@@ -358,7 +367,10 @@ describe('URL policy applies at every hop', () => {
 
 describe('redirects', () => {
   it('follows an ordinary chain and reports every hop', async () => {
-    const resolver = new FixtureResolver({ 'example.test': [PUBLIC_IP], 'www.example.test': [PUBLIC_IP] });
+    const resolver = new FixtureResolver({
+      'example.test': [PUBLIC_IP],
+      'www.example.test': [PUBLIC_IP],
+    });
     const transport = new FixtureTransport({
       'http://example.test/': { status: 301, headers: { location: 'https://example.test/' } },
       'https://example.test/': {
@@ -407,7 +419,10 @@ describe('redirects', () => {
   });
 
   it('honours a caller-supplied scope check — where crawl scope lives', async () => {
-    const resolver = new FixtureResolver({ 'example.test': [PUBLIC_IP], 'other.test': [PUBLIC_IP] });
+    const resolver = new FixtureResolver({
+      'example.test': [PUBLIC_IP],
+      'other.test': [PUBLIC_IP],
+    });
     const transport = new FixtureTransport({
       'https://example.test/': { status: 302, headers: { location: 'https://other.test/' } },
     });

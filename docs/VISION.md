@@ -41,7 +41,7 @@ John Smith
 ```
 
 Any competitor can build a form builder, a CRM, a crawler, or a voice agent.
-Almost none of them can answer *"which keyword produced this quarter's revenue"*
+Almost none of them can answer _"which keyword produced this quarter's revenue"_
 without a spreadsheet and a guess. That gap is the whole business.
 
 **This is why the crawler is being built carefully.** The intelligence layer is
@@ -66,7 +66,7 @@ intelligence, the Growth Score
 
 The organising question the product answers, at every surface:
 
-> *"What should I do next to get more customers, and can Growth OS do it for me?"*
+> _"What should I do next to get more customers, and can Growth OS do it for me?"_
 
 ---
 
@@ -74,21 +74,21 @@ The organising question the product answers, at every surface:
 
 Sequenced by dependency. Later stages are directional, not committed.
 
-| Stage | Scope | State |
-|---|---|---|
-| 0–3 | Auth, tenancy, permissions, CRM foundations, forms, lead capture, events, worker | Done |
+| Stage | Scope                                                                                                       | State       |
+| ----- | ----------------------------------------------------------------------------------------------------------- | ----------- |
+| 0–3   | Auth, tenancy, permissions, CRM foundations, forms, lead capture, events, worker                            | Done        |
 | **4** | **Website intelligence — crawler, sites, verification, robots, sitemaps, frontier, page facts, link graph** | **Current** |
-| 5 | Technical SEO intelligence — findings, severity, prioritisation | Next |
-| 6 | Search intelligence — Search Console, keywords, rankings, CTR |  |
-| 7 | Content OS — planning, clusters, briefs, internal linking |  |
-| 8 | Local growth — GBP, reviews, local rankings, reputation |  |
-| 9 | Conversion OS — landing pages, A/B, chat, call tracking, attribution |  |
-| 10 | Automation OS — visual workflows, triggers, conditions, actions |  |
-| 11 | Voice AI — inbound, outbound, qualification, booking, reactivation |  |
-| 12 | AI agent platform — specialised agents, orchestration |  |
-| 13 | Growth intelligence — attribution, CAC, LTV, ROI, Growth Score, Next Best Action |  |
-| 14 | Agency OS — multi-client, white label, portals, reporting, billing |  |
-| 15 | Marketplace + developer platform |  |
+| 5     | Technical SEO intelligence — findings, severity, prioritisation                                             | Next        |
+| 6     | Search intelligence — Search Console, keywords, rankings, CTR                                               |             |
+| 7     | Content OS — planning, clusters, briefs, internal linking                                                   |             |
+| 8     | Local growth — GBP, reviews, local rankings, reputation                                                     |             |
+| 9     | Conversion OS — landing pages, A/B, chat, call tracking, attribution                                        |             |
+| 10    | Automation OS — visual workflows, triggers, conditions, actions                                             |             |
+| 11    | Voice AI — inbound, outbound, qualification, booking, reactivation                                          |             |
+| 12    | AI agent platform — specialised agents, orchestration                                                       |             |
+| 13    | Growth intelligence — attribution, CAC, LTV, ROI, Growth Score, Next Best Action                            |             |
+| 14    | Agency OS — multi-client, white label, portals, reporting, billing                                          |             |
+| 15    | Marketplace + developer platform                                                                            |             |
 
 ### The commercial line
 
@@ -108,7 +108,7 @@ produced the SSRF boundary and the RLS audit is expensive per stage. Fifteen
 stages at that standard is a decade solo.
 
 At some point a deliberate decision is required about which stages get that
-treatment and which get *good enough to sell*. Making that call consciously is
+treatment and which get _good enough to sell_. Making that call consciously is
 much better than arriving at it through exhaustion.
 
 ---
@@ -118,8 +118,8 @@ much better than arriving at it through exhaustion.
 Four constraints. These are the **only** parts of this document that bind
 today's decisions, and they are restated in `AGENTS.md`.
 
-**1. Page identity is durable across crawls.** Change detection — *"your
-developer changed 37 pages yesterday"*, *"12 URLs became noindex"* — requires
+**1. Page identity is durable across crawls.** Change detection — _"your
+developer changed 37 pages yesterday"_, _"12 URLs became noindex"_ — requires
 diffing crawls, which requires a page entity keyed on `(site_id,
 normalised_url)` that crawl results attach to. Page rows that exist only inside
 a single `crawl_id` make change detection a migration and a backfill later.
@@ -139,7 +139,7 @@ own name.
 
 ## 6. Positioning
 
-*"Your AI growth team in one platform"* is approximately what HubSpot, GHL,
+_"Your AI growth team in one platform"_ is approximately what HubSpot, GHL,
 Semrush and forty funded startups currently say. It is not wrong; it is simply
 not a position.
 

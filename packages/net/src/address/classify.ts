@@ -236,7 +236,7 @@ function classifyIpv4(address: string): AddressVerdict {
   }
 
   for (const range of IPV4_TABLE) {
-    if (((value & range.mask) >>> 0) === range.network) {
+    if ((value & range.mask) >>> 0 === range.network) {
       return { allowed: false, rule: range.name, reason: range.reason };
     }
   }
