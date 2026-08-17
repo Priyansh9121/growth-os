@@ -94,7 +94,10 @@ export interface VerificationInstructions {
 export async function issueVerificationToken(
   context: SitesContext,
   siteId: string,
-): Promise<{ readonly siteId: string; readonly instructions: readonly VerificationInstructions[] }> {
+): Promise<{
+  readonly siteId: string;
+  readonly instructions: readonly VerificationInstructions[];
+}> {
   requireCapability(context, 'workspace:sites:manage');
 
   return inTenant(context, async (tx, workspace) => {

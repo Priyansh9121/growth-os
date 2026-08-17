@@ -62,9 +62,7 @@ export const SITE_VERIFICATION_FAILURES = [
 ] as const;
 export type SiteVerificationFailure = (typeof SITE_VERIFICATION_FAILURES)[number];
 
-export const SITE_VERIFICATION_FAILURE_LABELS: Readonly<
-  Record<SiteVerificationFailure, string>
-> = {
+export const SITE_VERIFICATION_FAILURE_LABELS: Readonly<Record<SiteVerificationFailure, string>> = {
   token_absent: 'We could not find the verification tag on your homepage.',
   token_mismatch: 'We found a Growth OS tag, but it carries a different code.',
   unreachable: 'We could not reach your website.',
