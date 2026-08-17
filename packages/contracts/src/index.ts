@@ -15,4 +15,5 @@ export * from './auth/index';
 export * from './growth/index';
 export * from './crm/index';
 export * from './forms/index';
+export * from './crawl/index';
 export * from './ai/index';

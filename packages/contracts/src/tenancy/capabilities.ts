@@ -151,6 +151,37 @@ export const CAPABILITIES = [
   'workspace:sites:read',
   'workspace:sites:manage',
 
+  /**
+   * Website crawling (Stage 4).
+   *
+   * `run` is a new verb, and it earns one. Starting a crawl is neither reading
+   * a result nor configuring the crawler: it makes **outbound HTTP requests at
+   * volume against a third party's server**, on a customer's say-so. Nothing
+   * else in this list does that, and folding it into `sites:manage` would mean
+   * the act of registering a website also carried the act of hammering it.
+   *
+   * It sits at MEMBER, not admin, because "I fixed the missing titles — recrawl
+   * and show me" is daily investigative work, and an operator who has to ask an
+   * admin will stop checking.
+   *
+   * ⚠️ Holding `crawls:run` is not permission to crawl any address. The site
+   * must be VERIFIED, which is a separate proof and cannot be granted by a role
+   * (ADR-0031).
+   */
+  'workspace:crawls:read',
+  'workspace:crawls:run',
+  'workspace:crawls:manage',
+
+  /**
+   * Proving ownership is separate from registering a site.
+   *
+   * `sites:manage` says "this business is associated with this domain", which
+   * is a claim. `sites:verify` completes the proof that unlocks crawling, and
+   * a workspace may reasonably let more people register a property than can
+   * turn one into a crawl target.
+   */
+  'workspace:sites:verify',
+
   // Agency scope
   'agency:read',
   'agency:update',
@@ -179,6 +210,9 @@ const VIEWER_CAPABILITIES = [
   // one opens an endpoint on the public internet, which is administrative.
   'workspace:forms:read',
   'workspace:sites:read',
+  // A viewer sees crawl results. Starting one is an outbound request at volume
+  // and is deliberately not theirs to make.
+  'workspace:crawls:read',
 ] as const satisfies readonly Capability[];
 
 /** A day-to-day operator: reads and writes operational data. */
@@ -198,6 +232,9 @@ const MEMBER_CAPABILITIES = [
   // Applying an EXISTING tag is daily work. Defining the vocabulary is not,
   // and neither is merging, erasing or bulk-importing.
   'workspace:crm:tags:apply',
+  // "I fixed the missing titles — recrawl and show me" is daily work. An
+  // operator who has to ask an admin to re-measure will stop checking.
+  'workspace:crawls:run',
 ] as const satisfies readonly Capability[];
 
 /** Trusted operator: everything except deleting the workspace and billing. */
@@ -225,6 +262,10 @@ const ADMIN_CAPABILITIES = [
   // a site is a claim about what the business owns. Both are administrative.
   'workspace:forms:manage',
   'workspace:sites:manage',
+  // Verification unlocks crawling a domain, and crawl configuration decides how
+  // hard someone else's server is asked to work. Both are administrative.
+  'workspace:sites:verify',
+  'workspace:crawls:manage',
 ] as const satisfies readonly Capability[];
 
 const OWNER_CAPABILITIES = [
