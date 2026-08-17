@@ -30,9 +30,9 @@ the product exists to answer:
 Answering it by joining on `normalised_url` across crawls is possible and
 fragile: there is no entity to attach anything to, nothing to record that a page
 was first seen in March, and no row that survives the crawl that discovered it.
-The repository's own operating contract names this shape directly — *"page rows
+The repository's own operating contract names this shape directly — _"page rows
 scoped only to a `crawl_id` make change detection a migration and a backfill
-later"*.
+later"_.
 
 The cost of fixing it was asymmetric in a way that decided the matter. Migration
 0008 was uncommitted and had been applied to nothing but a throwaway probe
@@ -51,12 +51,12 @@ site_pages     one row per URL per site, for all time      IDENTITY
 crawl_pages    one row per URL per crawl                   OBSERVATION
 ```
 
-| | `site_pages` | `crawl_pages` |
-| --- | --- | --- |
-| Unique on | `(site_id, normalised_url)` | `(crawl_id, normalised_url)` |
-| Lifetime | Survives every crawl | Belongs to one crawl |
-| Answers | "Is there a page at /about, and since when?" | "What did /about say on 14 August?" |
-| Carries | Identity and lifecycle only | Every fact |
+|           | `site_pages`                                 | `crawl_pages`                       |
+| --------- | -------------------------------------------- | ----------------------------------- |
+| Unique on | `(site_id, normalised_url)`                  | `(crawl_id, normalised_url)`        |
+| Lifetime  | Survives every crawl                         | Belongs to one crawl                |
+| Answers   | "Is there a page at /about, and since when?" | "What did /about say on 14 August?" |
+| Carries   | Identity and lifecycle only                  | Every fact                          |
 
 `site_pages` holds `first_seen_at` and `last_seen_at` and nothing else. Both are
 facts about **our knowledge of the page**, not about the page.

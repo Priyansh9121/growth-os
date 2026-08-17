@@ -107,11 +107,15 @@ ADRs, docs, code.
 
 ### Stage 3 — lead capture and attribution ingestion
 
-| ADR                                        | Title                                             | Status   |
-| ------------------------------------------ | ------------------------------------------------- | -------- |
-| [0025](ADR-0025-system-actors.md)          | System actors: capability grants without a user   | Accepted |
-| [0026](ADR-0026-public-form-resolution.md) | Resolving a public form to a tenant               | Accepted |
-| [0027](ADR-0027-embed-mechanism.md)        | Embed forms in an iframe, loaded by a tiny script | Accepted |
-| [0028](ADR-0028-attribution-storage.md)    | Browser attribution storage: sessionStorage only  | Accepted |
-| [0029](ADR-0029-web-properties.md)         | `sites`: one shared web-property model            | Accepted |
-| [0030](ADR-0030-worker-and-queue.md)       | A PostgreSQL-backed worker, and no Redis yet      | Accepted |
+| ADR                                          | Title                                                | Status   |
+| -------------------------------------------- | ---------------------------------------------------- | -------- |
+| [0025](ADR-0025-system-actors.md)            | System actors: capability grants without a user      | Accepted |
+| [0026](ADR-0026-public-form-resolution.md)   | Resolving a public form to a tenant                  | Accepted |
+| [0027](ADR-0027-embed-mechanism.md)          | Embed forms in an iframe, loaded by a tiny script    | Accepted |
+| [0028](ADR-0028-attribution-storage.md)      | Browser attribution storage: sessionStorage only     | Accepted |
+| [0029](ADR-0029-web-properties.md)           | `sites`: one shared web-property model               | Accepted |
+| [0030](ADR-0030-worker-and-queue.md)         | A PostgreSQL-backed worker, and no Redis yet         | Accepted |
+| [0031](ADR-0031-site-verification.md)        | Crawling requires proof of ownership                 | Accepted |
+| [0032](ADR-0032-crawler-network-security.md) | One outbound HTTP client, SSRF defended structurally | Accepted |
+| [0033](ADR-0033-url-normalisation.md)        | One definition of "the same page"                    | Accepted |
+| [0034](ADR-0034-crawl-storage-model.md)      | Page identity is separate from page facts            | Accepted |

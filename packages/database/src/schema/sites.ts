@@ -109,7 +109,15 @@ export const sites = pgTable(
      */
     crawlPageLimit: integer('crawl_page_limit').notNull().default(500),
     crawlMaxDepth: smallint('crawl_max_depth').notNull().default(10),
-    /** Concurrent requests to this origin. See the politeness note in ADR-0035. */
+    /**
+     * Concurrent requests to this origin.
+     *
+     * The CEILING is a CHECK constraint (1..4), because this decides how hard
+     * somebody else's server is asked to work and must not be settable to a
+     * number by any application path. The politeness POLICY that reads it —
+     * backoff, Retry-After, crawl-delay — is not yet decided and will carry
+     * its own ADR when robots handling lands.
+     */
     crawlConcurrency: smallint('crawl_concurrency').notNull().default(2),
     /** Minimum gap between requests to this origin, milliseconds. */
     crawlDelayMs: integer('crawl_delay_ms').notNull().default(500),
