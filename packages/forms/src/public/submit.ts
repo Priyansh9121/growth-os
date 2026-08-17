@@ -47,7 +47,7 @@ import {
   type SubmissionChallengeVerifier,
 } from './abuse';
 import { honeypotKeyFor } from './honeypot';
-import { isFirstPartyOrigin, isOriginAllowed } from '../shared/origin';
+import { isFirstPartyOrigin, isOriginAllowed } from '@growth-os/sites';
 import { sanitiseContext } from '../tracking/sanitise';
 import type { ResolvedForm } from './resolve';
 

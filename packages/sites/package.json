@@ -1,0 +1,19 @@
+{
+  "name": "@growth-os/sites",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Web properties: the one answer to which websites a workspace owns, and the proof that it owns them.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@growth-os/contracts": "*",
+    "@growth-os/database": "*",
+    "@growth-os/net": "*",
+    "drizzle-orm": "^0.45.2"
+  }
+}
