@@ -63,6 +63,11 @@ must make a dead session harmless.
   salvaged**. Do not read it, do not patch it, do not check whether it is mostly
   fine. Rebuild test-first. Auditing code you did not reason through is slower
   than rewriting it and produces code nobody understands.
+- **MUST NOT** fan out parallel agents to WRITE code. Parallel sessions are for
+  read-only investigation: probing behaviour, measuring, gathering evidence. Six
+  agents writing code against a shared session budget is how ~2,000 lines of
+  unreviewed parser output was produced and later deleted unread. An
+  investigation that dies costs time; a build that dies costs trust in the tree.
 - **MUST** end every session with the tree in one of two states: green and
   committed, or explicitly reported as unfinished with the exact failing thing
   named. Never leave ambiguity about which.
@@ -111,6 +116,10 @@ must make a dead session harmless.
   afterwards. A `@see ADR-00NN` pointing at a file that does not exist is worse
   than no citation: it reads as though the decision was recorded and reviewed.
   If the decision is not ready to write down, the code is not ready to commit.
+- **MUST** commit the dev log entry in the same slice as the work it describes,
+  exactly as an ADR lands with the code that cites it. A dev log written later is
+  written from commit messages rather than from memory of the reasoning, and
+  three tasks in this project were reported done without one.
 
 ---
 
