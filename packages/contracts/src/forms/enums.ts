@@ -26,6 +26,53 @@ export type SiteStatus = (typeof SITE_STATUSES)[number];
 export const SITE_VERIFICATION_STATES = ['unverified', 'pending', 'verified'] as const;
 export type SiteVerificationState = (typeof SITE_VERIFICATION_STATES)[number];
 
+/**
+ * How ownership was proved (Stage 4).
+ *
+ * ⚠️ TWO METHODS, DELIBERATELY, AND NOT THREE.
+ *
+ * `html_meta` proves control of **the thing we are about to crawl**, which is
+ * the permission actually being sought — and it is the only method available to
+ * a business whose site is on Squarespace, Wix or Shopify and who cannot edit
+ * DNS. That is most of the customer base.
+ *
+ * `dns_txt` proves control of the zone, which is stronger, and is the right
+ * answer for anyone who owns their domain outright.
+ *
+ * A verification FILE was considered and rejected: it proves exactly what the
+ * meta tag proves, needs the same access, and adds a third code path plus a
+ * third set of support instructions for no additional assurance.
+ */
+export const SITE_VERIFICATION_METHODS = ['html_meta', 'dns_txt'] as const;
+export type SiteVerificationMethod = (typeof SITE_VERIFICATION_METHODS)[number];
+
+export const SITE_VERIFICATION_METHOD_LABELS: Readonly<Record<SiteVerificationMethod, string>> = {
+  html_meta: 'Meta tag on your homepage',
+  dns_txt: 'DNS TXT record',
+};
+
+/** Why a verification attempt did not succeed. A closed set, shown to an operator. */
+export const SITE_VERIFICATION_FAILURES = [
+  'token_absent',
+  'token_mismatch',
+  'unreachable',
+  'not_html',
+  'dns_no_record',
+  'blocked',
+] as const;
+export type SiteVerificationFailure = (typeof SITE_VERIFICATION_FAILURES)[number];
+
+export const SITE_VERIFICATION_FAILURE_LABELS: Readonly<
+  Record<SiteVerificationFailure, string>
+> = {
+  token_absent: 'We could not find the verification tag on your homepage.',
+  token_mismatch: 'We found a Growth OS tag, but it carries a different code.',
+  unreachable: 'We could not reach your website.',
+  not_html: 'Your homepage did not return an HTML page.',
+  dns_no_record: 'We could not find the TXT record on your domain.',
+  blocked: 'That address cannot be checked. It resolves to a private network.',
+};
+
 // ---------------------------------------------------------------------------
 // Forms
 // ---------------------------------------------------------------------------

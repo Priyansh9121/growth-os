@@ -27,6 +27,7 @@ import type {
   SourceType,
   TaskPriority,
 } from './enums';
+import type { CrawlTrigger } from '../crawl/enums';
 
 /** Every domain event carries its tenant, so a subscriber can never act unscoped. */
 interface DomainEventBase {
@@ -179,6 +180,55 @@ export interface FormSubmissionRejectedEvent extends DomainEventBase {
   readonly reason?: string;
 }
 
+/**
+ * Website crawling (Stage 4).
+ *
+ * ⚠️ AGGREGATE FACTS ONLY — never a page, never a URL list, never HTML.
+ *
+ * A crawl of a 500-page site discovers thousands of links. Emitting an event
+ * per discovered anchor would put a site's entire URL structure through the bus
+ * and into every subscriber's log, at a volume nothing downstream asked for.
+ * These four fire once per crawl each, and a subscriber that needs the pages
+ * loads them through a tenant-scoped service.
+ */
+export interface CrawlStartedEvent extends DomainEventBase {
+  readonly name: 'seo.crawl.started';
+  readonly crawlId: string;
+  readonly siteId: string;
+  readonly trigger: CrawlTrigger;
+  readonly pageLimit: number;
+}
+
+export interface CrawlCompletedEvent extends DomainEventBase {
+  readonly name: 'seo.crawl.completed';
+  readonly crawlId: string;
+  readonly siteId: string;
+  readonly pagesDiscovered: number;
+  readonly pagesFetched: number;
+  readonly pagesFailed: number;
+  readonly durationMs: number;
+}
+
+export interface CrawlFailedEvent extends DomainEventBase {
+  readonly name: 'seo.crawl.failed';
+  readonly crawlId: string;
+  readonly siteId: string;
+  /** A typed category, never a stack trace. */
+  readonly category: string;
+}
+
+/**
+ * A site's ownership proof succeeded.
+ *
+ * Separate from the crawl events because it is a state change on the SITE, and
+ * because it is what unlocks crawling at all (ADR-0031).
+ */
+export interface SiteVerifiedEvent extends DomainEventBase {
+  readonly name: 'seo.site.verified';
+  readonly siteId: string;
+  readonly method: string;
+}
+
 export type CrmDomainEvent =
   | ContactCreatedEvent
   | AcquisitionRecordedEvent
@@ -191,7 +241,11 @@ export type CrmDomainEvent =
   | ContactErasedEvent
   | ContactsImportedEvent
   | FormSubmissionReceivedEvent
-  | FormSubmissionRejectedEvent;
+  | FormSubmissionRejectedEvent
+  | CrawlStartedEvent
+  | CrawlCompletedEvent
+  | CrawlFailedEvent
+  | SiteVerifiedEvent;
 
 export type CrmDomainEventName = CrmDomainEvent['name'];
 
