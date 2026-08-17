@@ -6,6 +6,17 @@
  * allowed-origin check, and by attribution. Three implementations of "is this
  * the same site?" would disagree on exactly the cases that matter.
  *
+ * ⚠️ ITS TESTS LIVE IN `packages/forms/src/public/public-path.test.ts`, NOT HERE.
+ *
+ * This file moved out of `@growth-os/forms` during the Stage 4 extraction
+ * (ADR-0029 §4); its behavioural coverage stayed where it was written, and it is
+ * thorough — credential confusion (`https://evil.test@abcplumbing.test`), the
+ * `www` distinction, suffix-match rejection, and the empty-allow-list default.
+ *
+ * The absence of a test file beside this one is therefore NOT a gap. Writing a
+ * second suite asserting the same properties in a different place is how two
+ * suites drift and start disagreeing about one function.
+ *
  * ⚠️ WHAT ORIGIN MATCHING IS FOR, AND WHAT IT IS NOT
  * `Origin` is a browser-supplied header. A browser sets it honestly; `curl`,
  * a script, or anything else sets it to whatever it likes. So this raises the

@@ -32,6 +32,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
+import { Parser } from 'htmlparser2';
 // ⚠️ THE ONE SANCTIONED EXCEPTION TO THE NETWORK BOUNDARY (AGENTS.md §5).
 //
 // A TXT lookup asks the configured resolver a question; it opens no
@@ -287,13 +288,19 @@ async function checkHtmlMeta(
     return { verified: false, failure: 'unreachable' };
   }
 
-  const html = outcome.body.toString('utf8');
-  const found = findMetaToken(html);
+  const published = findMetaTokens(outcome.body.toString('utf8'));
 
-  if (found === null) return { verified: false, failure: 'token_absent' };
-  // ⚠️ A CONSTANT-TIME COMPARISON IS NOT NEEDED AND WOULD BE THEATRE. Both
-  // values are public by design, and there is no secret to leak by timing.
-  if (found !== token) return { verified: false, failure: 'token_mismatch' };
+  if (published.length === 0) return { verified: false, failure: 'token_absent' };
+
+  // ⚠️ ANY published token may be the right one — a THIRD behaviour change.
+  //
+  // The regex returned the FIRST match, so a page carrying a stale token
+  // followed by the current one failed verification while visibly displaying
+  // the correct proof. Rotation makes exactly that page normal.
+  //
+  // A constant-time comparison is not needed and would be theatre: both values
+  // are public by design, so there is no secret to leak by timing.
+  if (!published.includes(token)) return { verified: false, failure: 'token_mismatch' };
 
   return { verified: true, method: 'html_meta' };
 }
@@ -303,32 +310,106 @@ export const VERIFICATION_USER_AGENT =
   'GrowthOSBot/1.0 (+https://growth-os.test/bot; site verification)';
 
 /**
- * Find the verification token in a document.
+ * Find every verification token published in a document's `<head>`.
  *
- * ⚠️ A DELIBERATELY NARROW MATCH, not an HTML parse.
+ * ⚠️ THIS IS A STRUCTURAL PARSE, AND THE PREVIOUS VERSION WAS A REGEX OVER RAW
+ * HTML. THAT REGEX WAS A VULNERABILITY IN THE CRAWL PERMISSION BOUNDARY.
  *
- * The full extractor lives in `@growth-os/crawler`, and importing it here would
- * make `@growth-os/sites` depend on the crawler — the exact cycle the package
- * split exists to avoid. What is needed is one attribute pair, and the pattern
- * is anchored tightly enough that it cannot match prose: the tag, the exact
- * name, and 32 hex characters.
+ * A pattern over text has no notion of document structure, so it cannot tell a
+ * real `<meta>` element from a string that looks like one. Measured against the
+ * old implementation, thirty-two distinct inputs returned a token that no
+ * browser would consider a published tag — a token inside an HTML comment, a
+ * `<script>` string, a `<textarea>`, a `<template>`, after `</html>`, in an
+ * unrelated element's attribute, and under a *longer* meta name
+ * (`growth-os-verification-other`) because the closing quote was optional.
  *
- * A false NEGATIVE (an unusual spelling we fail to match) costs an operator a
- * support call. A false POSITIVE would let a page that merely mentions the
- * string verify a domain, so the pattern errs towards strictness.
+ * The worst of them needed no HTML-injection flaw at all. The payload
+ * `name=growth-os-verification content=<token>` contains no `<`, `>`, `"` or
+ * `'`, so it survives HTML escaping byte-for-byte — which means any homepage
+ * that reflects a search term into its `<meta name="description">` or Open Graph
+ * tags could be made to verify a domain the requester does not own.
+ *
+ * It also backtracked quadratically: 88 ms at 70 KB, 5,973 ms at 560 KB, against
+ * a caller that accepts 1 MB. A page the requester chose could block the
+ * verification worker for roughly twenty seconds per attempt.
+ *
+ * A parser fixes all three at once, because the questions it answers are the
+ * ones that actually matter: is this an element, what is its tag name, what are
+ * its attributes, and where in the document is it.
+ *
+ * @see docs/decisions/ADR-0037-structural-verification-matching.md
  */
-export function findMetaToken(html: string): string | null {
-  const pattern = new RegExp(
-    `<meta[^>]*\\bname\\s*=\\s*["']?${VERIFICATION_META_NAME}["']?[^>]*\\bcontent\\s*=\\s*["']?([0-9a-fA-F]{32})["']?`,
-    'i',
-  );
-  const reversed = new RegExp(
-    `<meta[^>]*\\bcontent\\s*=\\s*["']?([0-9a-fA-F]{32})["']?[^>]*\\bname\\s*=\\s*["']?${VERIFICATION_META_NAME}["']?`,
-    'i',
+
+/**
+ * Containers whose contents are not the live document.
+ *
+ * `<template>` is inert markup; `<svg>` and `<math>` are foreign content with
+ * their own element namespaces. A `<meta>` inside any of them is not a published
+ * tag, and `<template>` in particular defeats the `<head>` restriction on its
+ * own — which is why it needs naming rather than relying on position.
+ *
+ * ⚠️ `<script>`, `<style>` and `<textarea>` are deliberately ABSENT: the parser
+ * already treats their contents as raw text, so no element is ever reported
+ * inside them. Listing them would suggest the protection comes from this set
+ * when it comes from the tokenizer. Asserted by test either way.
+ */
+const INERT_CONTAINERS = new Set(['template', 'svg', 'math']);
+
+/** A published token: exactly 32 hex characters, nothing else. */
+const TOKEN_SHAPE = /^[0-9a-f]{32}$/i;
+
+export function findMetaTokens(html: string): readonly string[] {
+  const tokens: string[] = [];
+  let headDepth = 0;
+  let inertDepth = 0;
+
+  const parser = new Parser(
+    {
+      onopentag(name, attributes) {
+        if (name === 'head') headDepth += 1;
+        if (INERT_CONTAINERS.has(name)) inertDepth += 1;
+
+        // ⚠️ `<head>` ONLY. This is a TIGHTENING over the regex, which matched
+        // anywhere in the response. `<head>` is where the instructions tell the
+        // operator to put the tag, and body content is far more likely to be
+        // user-generated — a comment, a review, a search echo (ADR-0037).
+        if (headDepth === 0 || inertDepth > 0) return;
+
+        // The tag name, exactly. Not a prefix: `<metadata>` inside SVG and any
+        // `<meta-*>` custom element both matched the old pattern.
+        if (name !== 'meta') return;
+
+        // The attribute name, exactly. `data-name` and `xml:name` both satisfied
+        // the old `\bname` because `-` and `:` are word boundaries.
+        const metaName = attributes['name'];
+        if (metaName === undefined) return;
+        if (metaName.trim().toLowerCase() !== VERIFICATION_META_NAME) return;
+
+        const content = attributes['content'];
+        if (content === undefined) return;
+
+        // ⚠️ TRIMMING IS NEW, and it is a LOOSENING. `content=" TOKEN "`
+        // previously returned null. CMS fields pad whitespace, and the token
+        // must still be exactly right, so this removes a support call without
+        // widening what is accepted (ADR-0037).
+        const trimmed = content.trim();
+        if (!TOKEN_SHAPE.test(trimmed)) return;
+
+        tokens.push(trimmed.toLowerCase());
+      },
+
+      onclosetag(name) {
+        if (name === 'head' && headDepth > 0) headDepth -= 1;
+        if (INERT_CONTAINERS.has(name) && inertDepth > 0) inertDepth -= 1;
+      },
+    },
+    { lowerCaseTags: true, lowerCaseAttributeNames: true, recognizeSelfClosing: true },
   );
 
-  const match = pattern.exec(html) ?? reversed.exec(html);
-  return match?.[1]?.toLowerCase() ?? null;
+  parser.write(html);
+  parser.end();
+
+  return tokens;
 }
 
 async function checkDnsTxt(
