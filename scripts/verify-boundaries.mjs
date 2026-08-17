@@ -150,6 +150,59 @@ const PROBES = [
     source:
       "import { getDependencies } from '../../web/src/server/dependencies';\nexport const probe = getDependencies;\n",
   },
+
+  // -------------------------------------------------------------------------
+  // ⚠️ THE NETWORK BOUNDARY (AGENTS.md §5, ADR-0032)
+  //
+  // The whole SSRF design rests on `@growth-os/net` being the only package that
+  // opens a socket. That was a sentence in a document until these probes
+  // existed — and a sentence is exactly what `eslint-plugin-boundaries` was
+  // before it turned out to enforce nothing.
+  //
+  // A second socket anywhere is a path around URL admission, address
+  // classification, pinned resolution, per-hop redirect revalidation and the
+  // body caps. All of it, at once.
+  // -------------------------------------------------------------------------
+  {
+    name: 'crawler → node:http (a second socket)',
+    file: 'packages/crawler/src/__boundary_probe.ts',
+    source: "import { request } from 'node:http';\nexport const probe = request;\n",
+  },
+  {
+    name: 'crawler → node:dns (resolution outside the pin)',
+    file: 'packages/crawler/src/__boundary_probe.ts',
+    source: "import { lookup } from 'node:dns';\nexport const probe = lookup;\n",
+  },
+  {
+    name: 'sites → node:https (verification must use safeFetch)',
+    file: 'packages/sites/src/__boundary_probe.ts',
+    source: "import { request } from 'node:https';\nexport const probe = request;\n",
+  },
+  {
+    name: 'forms → node:net',
+    file: 'packages/forms/src/__boundary_probe.ts',
+    source: "import { connect } from 'node:net';\nexport const probe = connect;\n",
+  },
+  {
+    name: 'crm → undici (a client that follows redirects)',
+    file: 'packages/crm/src/__boundary_probe.ts',
+    source: "import { request } from 'undici';\nexport const probe = request;\n",
+  },
+  {
+    name: 'apps/web → axios',
+    file: 'apps/web/src/__boundary_probe.ts',
+    source: "import axios from 'axios';\nexport const probe = axios;\n",
+  },
+  {
+    name: 'worker → node:https',
+    file: 'apps/worker/src/__boundary_probe.ts',
+    source: "import { request } from 'node:https';\nexport const probe = request;\n",
+  },
+  {
+    name: 'crawler → dynamic import of node:http',
+    file: 'packages/crawler/src/__boundary_probe.ts',
+    source: "export const probe = () => import('node:http');\n",
+  },
 ];
 
 let failures = 0;

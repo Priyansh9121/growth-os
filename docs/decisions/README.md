@@ -119,3 +119,4 @@ ADRs, docs, code.
 | [0032](ADR-0032-crawler-network-security.md) | One outbound HTTP client, SSRF defended structurally | Accepted |
 | [0033](ADR-0033-url-normalisation.md)        | One definition of "the same page"                    | Accepted |
 | [0034](ADR-0034-crawl-storage-model.md)      | Page identity is separate from page facts            | Accepted |
+| [0035](ADR-0035-robots-and-politeness.md)    | Fail closed on unreadable robots.txt, and politeness | Accepted |
