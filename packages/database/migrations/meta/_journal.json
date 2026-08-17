@@ -57,6 +57,13 @@
       "when": 1786855333957,
       "tag": "0007_lead_capture",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786946049222,
+      "tag": "0008_website_crawler",
+      "breakpoints": true
     }
   ]
 }

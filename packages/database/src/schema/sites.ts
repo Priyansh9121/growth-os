@@ -18,13 +18,31 @@
  * @see docs/decisions/ADR-0029-web-properties.md
  */
 
-import { index, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-import { SITE_STATUSES, SITE_VERIFICATION_STATES } from '@growth-os/contracts';
+import {
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  smallint,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
+import {
+  SITE_STATUSES,
+  SITE_VERIFICATION_METHODS,
+  SITE_VERIFICATION_STATES,
+} from '@growth-os/contracts';
 import { users } from './identity';
 import { workspaces } from './tenancy';
 
 export const siteStatusEnum = pgEnum('site_status', SITE_STATUSES);
 export const siteVerificationEnum = pgEnum('site_verification_state', SITE_VERIFICATION_STATES);
+export const siteVerificationMethodEnum = pgEnum(
+  'site_verification_method',
+  SITE_VERIFICATION_METHODS,
+);
 
 export const sites = pgTable(
   'sites',
@@ -65,8 +83,36 @@ export const sites = pgTable(
      */
     verificationState: siteVerificationEnum('verification_state').notNull().default('unverified'),
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
-    /** The token a DNS TXT record must carry. Generated on demand, Stage 4. */
+
+    /**
+     * The opaque proof an operator publishes on their own property.
+     *
+     * ⚠️ IT IS A PROOF, NOT A CREDENTIAL. Holding it grants nothing: it is
+     * published in a customer's page source or in public DNS, and every
+     * security property must hold with it fully visible. What it demonstrates
+     * is control of a place only the owner can write to.
+     *
+     * 128 bits, hex, same shape and CHECK as a form's public key.
+     */
     verificationToken: text('verification_token'),
+    verificationTokenIssuedAt: timestamp('verification_token_issued_at', { withTimezone: true }),
+    verificationMethod: siteVerificationMethodEnum('verification_method'),
+    /** When the proof was last looked for, successfully or not. */
+    verificationCheckedAt: timestamp('verification_checked_at', { withTimezone: true }),
+
+    /**
+     * Crawl configuration, per site.
+     *
+     * On the site rather than on each crawl because it is a property of how
+     * hard THIS server may be asked to work — a shared host and a dedicated one
+     * deserve different answers, and that answer should outlive one run.
+     */
+    crawlPageLimit: integer('crawl_page_limit').notNull().default(500),
+    crawlMaxDepth: smallint('crawl_max_depth').notNull().default(10),
+    /** Concurrent requests to this origin. See the politeness note in ADR-0035. */
+    crawlConcurrency: smallint('crawl_concurrency').notNull().default(2),
+    /** Minimum gap between requests to this origin, milliseconds. */
+    crawlDelayMs: integer('crawl_delay_ms').notNull().default(500),
 
     createdByUserId: uuid('created_by_user_id').references(() => users.id, {
       onDelete: 'set null',
