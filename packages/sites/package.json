@@ -14,6 +14,7 @@
     "@growth-os/contracts": "*",
     "@growth-os/database": "*",
     "@growth-os/net": "*",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "htmlparser2": "^12.0.0"
   }
 }

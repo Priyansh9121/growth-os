@@ -46,3 +46,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0014](0014-the-worker-and-a-hang.md)                    | The worker, and a process that would not exit    | 2026-08-16 |
 | [0015](0015-forms-admin-and-the-browser-suite.md)        | Forms administration, and what a browser found   | 2026-08-16 |
 | [0016](0016-the-network-boundary-and-the-crawl-model.md) | The network boundary, crawl model and robots.txt | 2026-08-17 |
+| [0017](0017-the-permission-boundary-was-a-regex.md)      | The permission boundary was a regex              | 2026-08-17 |
