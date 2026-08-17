@@ -97,6 +97,14 @@ must make a dead session harmless.
   database or probe artefacts before any first push. If `git ls-files` surfaces
   anything credential-shaped, stop and report rather than committing.
 - **MUST NOT** use `git add -A` blindly. Stage deliberately; read the diff.
+- **MUST** commit with an explicit pathspec (`git commit -- <paths>`) or verify
+  `git diff --cached --name-only` immediately before committing. Staging
+  deliberately and then running a bare `git commit` commits the whole index —
+  the same failure as `git add -A`, with extra steps. A `git mv` from earlier in
+  the session is already staged and will be swept in silently.
+- **MUST** verify each slice is independently green, not merely that the final
+  tree is. A slice that only typechecks because a later slice fixes it is not a
+  slice. Check out each commit and measure; do not infer it from the tip.
 - Commit messages are declarative and state what changed and why. Where a
   finding contradicted the plan, say so in the subject.
 
