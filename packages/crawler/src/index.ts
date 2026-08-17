@@ -13,6 +13,8 @@
  * ⚠️ IT STORES FACTS, NOT FINDINGS. `title_length = 0` is Stage 4;
  * "Missing title, severity high" is Stage 5.
  */
+export * from './frontier/decide';
+export * from './frontier/frontier';
 export * from './robots/parse';
 export * from './robots/fetch';
 export * from './urls/normalise';
