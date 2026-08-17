@@ -12,4 +12,5 @@ export * from './crm';
 export * from './crm-lifecycle';
 export * from './sites';
 export * from './forms';
+export * from './crawl';
 export * from './jobs';
