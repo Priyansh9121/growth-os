@@ -5,7 +5,8 @@
   "type": "module",
   "description": "The one outbound HTTP client. Every request Growth OS makes to an address a customer supplied goes through here, and cannot reach private infrastructure.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/fixtures.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

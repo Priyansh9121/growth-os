@@ -32,6 +32,14 @@
  */
 
 import { randomBytes } from 'node:crypto';
+// ⚠️ THE ONE SANCTIONED EXCEPTION TO THE NETWORK BOUNDARY (AGENTS.md §5).
+//
+// A TXT lookup asks the configured resolver a question; it opens no
+// connection to the host being asked about, so there is no SSRF surface to
+// route through `safeFetch` — and routing it there would make it perform a
+// request it currently does not. Recorded in ADR-0031 so nobody "fixes the
+// inconsistency" later. Every HTTP path in this file goes through safeFetch.
+// eslint-disable-next-line no-restricted-syntax
 import { resolveTxt } from 'node:dns/promises';
 import { and, eq } from 'drizzle-orm';
 import {

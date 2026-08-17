@@ -342,6 +342,52 @@ export default tseslint.config(
   },
 
   /**
+   * ⚠️ THE NETWORK BOUNDARY — only `@growth-os/net` may open a socket.
+   *
+   * AGENTS.md §5 states this, and until now nothing enforced it: the rule was a
+   * sentence in a document, which is the same category of thing as the
+   * `eslint-plugin-boundaries` config that reported nothing. `verify-boundaries`
+   * now proves it fails.
+   *
+   * ⚠️ IMPLEMENTED WITH `no-restricted-syntax`, NOT `no-restricted-imports`,
+   * and that is deliberate. Flat config REPLACES rule options wholesale rather
+   * than merging them (see the worker block below), so a second
+   * `no-restricted-imports` block matching `packages/**` would silently delete
+   * every per-package boundary it overlapped. A different rule name cannot
+   * collide, so this composes instead of destroying.
+   *
+   * The point is not that these modules are dangerous in themselves. It is that
+   * SSRF defence is a pipeline — URL admission, address classification, pinned
+   * resolution, per-hop redirect revalidation, body caps — and a second socket
+   * anywhere in the repository is a path around all of it (ADR-0032).
+   */
+  {
+    files: ['packages/**/*.ts', 'apps/**/*.ts', 'apps/**/*.tsx'],
+    ignores: ['packages/net/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'ImportDeclaration[source.value=/^(node:)?(http|https|net|dns|tls|dgram)(\\/.*)?$/]',
+          message:
+            'Only @growth-os/net may open a socket. Route the request through safeFetch (ADR-0032, AGENTS.md §5).',
+        },
+        {
+          selector: 'ImportDeclaration[source.value=/^(undici|axios|got|node-fetch|superagent)$/]',
+          message:
+            'HTTP clients follow redirects around the SSRF layer. Use safeFetch from @growth-os/net (ADR-0032).',
+        },
+        {
+          selector:
+            'ImportExpression[source.value=/^(node:)?(http|https|net|dns|tls|dgram)(\\/.*)?$/]',
+          message: 'A dynamic import is still a socket. Use @growth-os/net (ADR-0032).',
+        },
+      ],
+    },
+  },
+
+  /**
    * The worker is a SECOND PROCESS, not a second service.
    *
    * ⚠️ THIS BLOCK MUST STAY AFTER the generic `apps/**` block above. ESLint

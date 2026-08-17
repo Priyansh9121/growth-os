@@ -115,8 +115,8 @@ export const sites = pgTable(
      * The CEILING is a CHECK constraint (1..4), because this decides how hard
      * somebody else's server is asked to work and must not be settable to a
      * number by any application path. The politeness POLICY that reads it —
-     * backoff, Retry-After, crawl-delay — is not yet decided and will carry
-     * its own ADR when robots handling lands.
+     * backoff, Retry-After, and the rule that `Crawl-delay` may only ever slow
+     * us down — is [ADR-0035](../../../../docs/decisions/ADR-0035-robots-and-politeness.md).
      */
     crawlConcurrency: smallint('crawl_concurrency').notNull().default(2),
     /** Minimum gap between requests to this origin, milliseconds. */
