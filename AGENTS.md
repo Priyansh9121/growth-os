@@ -107,6 +107,10 @@ must make a dead session harmless.
   slice. Check out each commit and measure; do not infer it from the tip.
 - Commit messages are declarative and state what changed and why. Where a
   finding contradicted the plan, say so in the subject.
+- **MUST** land an ADR in the same commit as the code that cites it, never
+  afterwards. A `@see ADR-00NN` pointing at a file that does not exist is worse
+  than no citation: it reads as though the decision was recorded and reviewed.
+  If the decision is not ready to write down, the code is not ready to commit.
 
 ---
 
@@ -189,16 +193,32 @@ from `docs/VISION.md` binds today's decisions.
 A task is done when **all** of these hold, each verified by a command run in this
 session:
 
-1. `tsc --noEmit` clean across affected packages
-2. Lint clean
-3. Full unit suite green — state the observed count
-4. Migrations apply from zero on a throwaway database, then it is destroyed
-5. Boundary probes pass (no socket outside `@growth-os/net`)
-6. Committed in logical slices, tree clean, pushed
-7. An ADR exists for every non-obvious decision made
-8. Dev log entry written
+1. **`npm run verify:all` passes** — state the observed test count
+2. Migrations apply from zero on a throwaway database, then it is destroyed
+3. Committed in logical slices, each independently green, tree clean, pushed
+4. An ADR exists for every non-obvious decision made
+5. Dev log entry written
 
-Anything short of all eight is reported as unfinished, with the gap named.
+Anything short of all five is reported as unfinished, with the gap named.
+
+### ⚠️ Why (1) defers to the repository instead of listing the checks
+
+It used to enumerate them: tsc, lint, unit suite, boundary probes. An agent
+followed that list exactly and still shipped eight unformatted files, because
+the list said "lint" and the repository's real gate also runs `format:check`.
+
+**That was a contract bug, not an agent error.** A parallel list of checks
+drifts from the thing it is a copy of, and the copy is always the one that is
+wrong. `verify:all` is the repository's own answer to "is this shippable"; when
+a gate is added there it applies here immediately, with nothing to remember.
+
+Today that is `format:check`, `lint`, `typecheck`, `test`, `verify:boundaries`
+and `verify:gitignore`.
+
+**(2) stays separate on purpose.** `verify:all` cannot run it — it needs a
+database — so folding it in would delete the check rather than inherit it. It is
+the gate that catches a migration which passes review and fails on a fresh
+schema, which is every migration's first real test.
 
 ---
 
