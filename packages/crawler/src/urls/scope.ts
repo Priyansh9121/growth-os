@@ -17,7 +17,8 @@
  * fact — on `wordpress.com`, `myshopify.com` or `github.io` it is emphatically
  * false, and those are exactly the hosts small businesses use.
  *
- * @see docs/decisions/ADR-0034-crawl-scope-and-storage.md
+ * @see docs/decisions/ADR-0033-url-normalisation.md — scope, and the three
+ *   questions it must not be confused with
  */
 
 export type ScopeVerdict = 'in_scope' | 'external' | 'other_subdomain' | 'scheme_upgrade';
