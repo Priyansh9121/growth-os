@@ -12,7 +12,7 @@
 
 import { type NextResponse } from 'next/server';
 import { createSiteSchema, ValidationError } from '@growth-os/contracts';
-import { createSite, listSites } from '@growth-os/forms';
+import { createSite, listSites } from '@growth-os/sites';
 import {
   buildRequestContext,
   errorResponse,

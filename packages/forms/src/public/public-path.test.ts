@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { formVersionConfigSchema, type FormFieldConfig } from '@growth-os/contracts';
-import { isFirstPartyOrigin, isOriginAllowed, normaliseOrigin } from '../shared/origin';
+import { isFirstPartyOrigin, isOriginAllowed, normaliseOrigin } from '@growth-os/sites';
 import { evaluateAbuseSignals } from './abuse';
 import { honeypotKeyFor } from './honeypot';
 import { mapValues, renderTitle } from './submit';

@@ -16,18 +16,18 @@ import {
 } from '@growth-os/contracts';
 import { schemaTables } from '@growth-os/database';
 import {
-  actorUserId,
+  actorUserIdOrNull,
   contextNow,
   inTenant,
   requireCapability,
   tenantScope,
-  type FormsContext,
-} from '../shared/context';
-import { normaliseOrigin } from '../shared/origin';
+  type SitesContext,
+} from './context';
+import { normaliseOrigin } from './origin';
 
 const { forms, sites } = schemaTables;
 
-export async function listSites(context: FormsContext): Promise<readonly SiteView[]> {
+export async function listSites(context: SitesContext): Promise<readonly SiteView[]> {
   requireCapability(context, 'workspace:sites:read');
 
   return inTenant(context, async (tx, workspace) => {
@@ -58,7 +58,7 @@ export async function listSites(context: FormsContext): Promise<readonly SiteVie
   });
 }
 
-export async function createSite(context: FormsContext, input: CreateSiteInput): Promise<SiteView> {
+export async function createSite(context: SitesContext, input: CreateSiteInput): Promise<SiteView> {
   requireCapability(context, 'workspace:sites:manage');
 
   // Normalised BEFORE the uniqueness check, or `abcplumbing.test` and
@@ -89,7 +89,7 @@ export async function createSite(context: FormsContext, input: CreateSiteInput):
         workspaceId: workspace,
         name: input.name,
         origin,
-        createdByUserId: actorUserId(context),
+        createdByUserId: actorUserIdOrNull(context),
         createdAt: now,
         updatedAt: now,
       })

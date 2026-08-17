@@ -34,7 +34,7 @@ import {
   type TestHarness,
 } from '@growth-os/database';
 import { createForm, updateForm } from './forms/service';
-import { createSite } from './sites/service';
+import { createSite } from '@growth-os/sites';
 import { NoChallengeVerifier } from './public/abuse';
 import { resolvePublicForm, toPublicView } from './public/resolve';
 import { submitPublicForm, type SubmitDependencies } from './public/submit';

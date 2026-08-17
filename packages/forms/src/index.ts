@@ -11,8 +11,6 @@
  * (ADR-0021).
  */
 export * from './shared/context';
-export * from './shared/origin';
-export * from './sites/service';
 export * from './forms/service';
 export * from './public/resolve';
 export * from './public/honeypot';

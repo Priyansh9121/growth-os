@@ -2,7 +2,7 @@
   "name": "@growth-os/web",
   "version": "0.1.0",
   "private": true,
-  "description": "Growth OS web application — marketing-grade authentication surface and the operator dashboard shell.",
+  "description": "Growth OS web application \u2014 marketing-grade authentication surface and the operator dashboard shell.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,6 +13,7 @@
     "@growth-os/auth": "*",
     "@growth-os/contracts": "*",
     "@growth-os/database": "*",
+    "@growth-os/sites": "*",
     "@growth-os/ui": "*",
     "@react-three/fiber": "^9.7.0",
     "geist": "^1.7.2",
