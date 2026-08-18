@@ -142,6 +142,25 @@ export const SKIP_REASONS = [
   'sensitive_url',
   'unsupported_scheme',
   'cancelled',
+  /**
+   * Longer than the crawler will admit, so it never acquired an identity.
+   *
+   * ⚠️ NOT `unsupported_scheme`, which is what it was recorded as until
+   * ADR-0042. That label says "this is a `mailto:`" about an ordinary page
+   * whose only problem is length — it is the label every `normaliseUrl → null`
+   * received, and it made a length ceiling look like a scheme decision.
+   */
+  'url_too_long',
+  /**
+   * The robots matcher ran out of its step budget, so whether a rule matched
+   * was never computed and the URL was refused rather than guessed.
+   *
+   * ⚠️ NOT `robots_disallowed`, which asserts that a rule the site owner wrote
+   * decided this. It did not; our budget did (ADR-0039). The `RobotsVerdict`
+   * has carried the distinction since that ADR and the frontier row could not
+   * express it.
+   */
+  'budget_exhausted',
 ] as const;
 export type SkipReason = (typeof SKIP_REASONS)[number];
 
@@ -155,6 +174,9 @@ export const SKIP_REASON_LABELS: Readonly<Record<SkipReason, string>> = {
   sensitive_url: 'URL looked like a private link',
   unsupported_scheme: 'Not a web page',
   cancelled: 'Crawl cancelled',
+  url_too_long: 'URL was longer than we crawl',
+  // ⚠️ Says what happened, never that the site is at fault (AGENTS.md §5).
+  budget_exhausted: 'Rule was too costly to evaluate',
 };
 
 // ---------------------------------------------------------------------------

@@ -130,16 +130,44 @@ export interface NormaliseOptions {
 }
 
 /**
- * Reduce a URL to its crawl identity, or `null` if it is not one.
+ * Why a URL has no crawl identity.
  *
- * `null` means "not a crawlable resource" — a `mailto:`, a `javascript:`, an
- * anchor-only `#section`, an unparseable string, or one longer than
- * `MAX_URL_LENGTH`. Never a repaired guess: a half-parsed URL that "looks
- * close" enqueues the wrong page, which is worse than enqueueing none.
+ * ⚠️ TWO REFUSALS, BECAUSE THEY ARE DIFFERENT FACTS ABOUT A SITE.
+ * A `mailto:` is not a page and never will be. A URL over the ceiling **is** a
+ * page — an ordinary one — that this crawler will not carry. Collapsing them
+ * meant the frontier recorded `unsupported_scheme` for a URL with a perfectly
+ * good scheme, which is a wrong fact and not merely a vague one (ADR-0042).
  */
-export function normaliseUrl(input: string, options: NormaliseOptions = {}): string | null {
+export type NormaliseRefusal = 'not_a_resource' | 'too_long';
+
+export interface NormaliseOutcome {
+  /** The crawl identity, or `null` when there is none. */
+  readonly url: string | null;
+  /** Why there is none. `null` exactly when `url` is not. */
+  readonly refusal: NormaliseRefusal | null;
+}
+
+const NOT_A_RESOURCE: NormaliseOutcome = { url: null, refusal: 'not_a_resource' };
+const TOO_LONG: NormaliseOutcome = { url: null, refusal: 'too_long' };
+
+/**
+ * Reduce a URL to its crawl identity, and say why when there is none.
+ *
+ * ⚠️ THIS IS THE ONLY IMPLEMENTATION. `normaliseUrl` below is a one-line
+ * wrapper over it, so the two can never disagree about what "the same page"
+ * means — §5 makes URL identity singular, and two normalisers that drift is
+ * exactly the failure that invariant exists to prevent. Callers that do not
+ * need the reason should keep using `normaliseUrl`.
+ *
+ * Never a repaired guess: a half-parsed URL that "looks close" enqueues the
+ * wrong page, which is worse than enqueueing none.
+ */
+export function normaliseUrlOutcome(
+  input: string,
+  options: NormaliseOptions = {},
+): NormaliseOutcome {
   const raw = input.trim();
-  if (raw.length === 0) return null;
+  if (raw.length === 0) return NOT_A_RESOURCE;
 
   // ⚠️ THE CEILING IS CHECKED BEFORE ANY WORK, AND AGAIN AFTER.
   //
@@ -153,24 +181,24 @@ export function normaliseUrl(input: string, options: NormaliseOptions = {}): str
   // `MAX_URL_LENGTH` is imported, never redeclared. `admitUrl` enforces the
   // same number at fetch time, and a frontier row the fetcher will always
   // refuse is a row that can only ever fail (ADR-0038).
-  if (raw.length > MAX_URL_LENGTH) return null;
+  if (raw.length > MAX_URL_LENGTH) return TOO_LONG;
 
   // ⚠️ A FRAGMENT-ONLY HREF IS THE CURRENT PAGE, NOT A NEW ONE.
   // `<a href="#main">Skip to content</a>` appears on every accessible site on
   // the internet. Enqueueing it would add one self-referential URL per page.
-  if (raw.startsWith('#')) return null;
+  if (raw.startsWith('#')) return NOT_A_RESOURCE;
 
   let url: URL;
   try {
     url = options.base ? new URL(raw, options.base) : new URL(raw);
   } catch {
-    return null;
+    return NOT_A_RESOURCE;
   }
 
   // Only web pages have crawl identity. `mailto:`, `tel:`, `javascript:`,
   // `data:` are recorded as links elsewhere and are not resources.
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-  if (url.hostname.length === 0) return null;
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return NOT_A_RESOURCE;
+  if (url.hostname.length === 0) return NOT_A_RESOURCE;
 
   // -- Host -----------------------------------------------------------------
   // The parser lowercases and punycodes already; the trailing root-zone dot is
@@ -223,9 +251,21 @@ export function normaliseUrl(input: string, options: NormaliseOptions = {}): str
   // thing keeping the stored identity inside the ceiling (ADR-0038).
   //
   // A relative href resolved against a long base reaches here the same way.
-  if (normalised.length > MAX_URL_LENGTH) return null;
+  if (normalised.length > MAX_URL_LENGTH) return TOO_LONG;
 
-  return normalised;
+  return { url: normalised, refusal: null };
+}
+
+/**
+ * Reduce a URL to its crawl identity, or `null` if it is not one.
+ *
+ * `null` means "not a crawlable resource" — a `mailto:`, a `javascript:`, an
+ * anchor-only `#section`, an unparseable string, or one longer than
+ * `MAX_URL_LENGTH`. Use `normaliseUrlOutcome` when which of those it was
+ * matters; it is the same code path.
+ */
+export function normaliseUrl(input: string, options: NormaliseOptions = {}): string | null {
+  return normaliseUrlOutcome(input, options).url;
 }
 
 /**

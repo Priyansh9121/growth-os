@@ -22,6 +22,8 @@ import {
   type Candidate,
   type DecideInput,
 } from './decide';
+import { MAX_URL_LENGTH } from '@growth-os/net';
+import { SKIP_REASONS, SKIP_REASON_LABELS } from '@growth-os/contracts';
 import { parseRobotsTxt, ALLOW_ALL } from '../robots/parse';
 import { crawlScope } from '../urls/scope';
 
@@ -370,5 +372,151 @@ describe('terminationReason — all four conditions', () => {
         skippedForDepth: true,
       }),
     ).toBe('cancelled');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §5 the two reasons the frontier row could not express — see ADR-0042
+// ---------------------------------------------------------------------------
+
+describe('⚠️ url_too_long — an over-length URL is not "not a web page"', () => {
+  const overLength = `https://example.test/${'a'.repeat(MAX_URL_LENGTH)}`;
+
+  it('records url_too_long, not unsupported_scheme', () => {
+    // ADR-0038 capped the URL in normaliseUrl and recorded the reason as
+    // unsupported_scheme — the label every normaliseUrl → null gets. It says
+    // "this is a mailto:" about a URL that is an ordinary page, too long.
+    const decision = decideEnqueue(input({ candidate: candidate(overLength) }));
+
+    expect(decision.accept).toBe(false);
+    if (!decision.accept) {
+      expect(decision.skipReason).toBe('url_too_long');
+      expect(decision.normalisedUrl).toBeNull();
+    }
+  });
+
+  it('⚠️ still records unsupported_scheme for things that are not resources', () => {
+    // The distinction is the whole point: these must NOT be relabelled.
+    for (const url of ['mailto:sam@example.test', 'tel:+61400000000', 'javascript:void(0)']) {
+      const decision = decideEnqueue(input({ candidate: candidate(url) }));
+      expect(decision.accept).toBe(false);
+      if (!decision.accept) expect(decision.skipReason, url).toBe('unsupported_scheme');
+    }
+  });
+
+  it('⚠️ catches a URL that only exceeds the ceiling AFTER normalising', () => {
+    // ADR-0038 measured `+` → `%20` growing a query 2.98×, so an input under
+    // the ceiling can produce an identity over it. That path returns null from
+    // the second check, and it must carry the same reason as the first.
+    const grows = `https://example.test/s?q=${'+'.repeat(900)}`;
+    expect(grows.length).toBeLessThan(MAX_URL_LENGTH);
+
+    const decision = decideEnqueue(input({ candidate: candidate(grows) }));
+    expect(decision.accept).toBe(false);
+    if (!decision.accept) expect(decision.skipReason).toBe('url_too_long');
+  });
+
+  it('exactly at the ceiling is still accepted', () => {
+    const atCap = `https://example.test/${'a'.repeat(MAX_URL_LENGTH - 'https://example.test/'.length)}`;
+    expect(atCap.length).toBe(MAX_URL_LENGTH);
+    expect(decideEnqueue(input({ candidate: candidate(atCap) })).accept).toBe(true);
+  });
+});
+
+describe('⚠️ budget_exhausted — our limit, not a rule the operator wrote', () => {
+  /** The pattern ADR-0039 measured at 1,049,601 steps against a 2,048 target. */
+  const hostileRobots = parseRobotsTxt(`User-agent: *\nDisallow: /*${'a'.repeat(1023)}b\n`);
+  const atCeiling = `https://example.test/${'a'.repeat(MAX_URL_LENGTH - 'https://example.test/'.length)}`;
+
+  it('records budget_exhausted rather than robots_disallowed', () => {
+    // The RobotsVerdict already knew. The frontier row could not say it, so an
+    // operator asking "why was this skipped?" was told a rule they wrote
+    // decided it. It did not; our step budget did.
+    const decision = decideEnqueue(
+      input({ candidate: candidate(atCeiling), robots: hostileRobots }),
+    );
+
+    expect(decision.accept).toBe(false);
+    if (!decision.accept) {
+      expect(decision.skipReason).toBe('budget_exhausted');
+      // The pattern is still quoted verbatim — it is the fact being reported.
+      expect(decision.rule).toContain('Disallow: /*');
+    }
+  });
+
+  it('⚠️ an ordinary robots refusal is still robots_disallowed', () => {
+    const decision = decideEnqueue(
+      input({
+        candidate: candidate('https://example.test/admin/customers'),
+        robots: parseRobotsTxt('User-agent: *\nDisallow: /admin'),
+      }),
+    );
+
+    expect(decision.accept).toBe(false);
+    if (!decision.accept) {
+      expect(decision.skipReason).toBe('robots_disallowed');
+      expect(decision.rule).toBe('Disallow: /admin');
+    }
+  });
+
+  it('⚠️ a site-wide refusal is still robots_disallowed with no rule', () => {
+    // robots.txt could not be read at all (ADR-0035). Nothing was evaluated,
+    // so no budget was exhausted.
+    const decision = decideEnqueue(
+      input({ candidate: candidate('https://example.test/x'), siteDisallowed: true }),
+    );
+
+    expect(decision.accept).toBe(false);
+    if (!decision.accept) {
+      expect(decision.skipReason).toBe('robots_disallowed');
+      expect(decision.rule).toBeNull();
+    }
+  });
+});
+
+describe('⚠️ every reason decide.ts emits is one the database can store', () => {
+  it('SKIP_REASONS covers the whole set', () => {
+    // A reason the enum cannot hold is a row the insert refuses, at crawl time,
+    // on a path nothing in the unit suite would reach.
+    const emitted = new Set<string>();
+    const cases: readonly (readonly [string, Partial<DecideInput>])[] = [
+      ['mailto:x@y.test', {}],
+      [`https://example.test/${'a'.repeat(MAX_URL_LENGTH)}`, {}],
+      ['https://other.test/x', {}],
+      ['https://sub.example.test/x', {}],
+      ['https://example.test/deep', { budget: { pageLimit: 500, maxDepth: 0, maxRows: 5000 } }],
+      ['https://example.test/x', { siteDisallowed: true }],
+      ['https://example.test/admin', { robots: parseRobotsTxt('User-agent: *\nDisallow: /admin') }],
+      [
+        `https://example.test/${'a'.repeat(MAX_URL_LENGTH - 21)}`,
+        { robots: parseRobotsTxt(`User-agent: *\nDisallow: /*${'a'.repeat(1023)}b\n`) },
+      ],
+      [
+        'https://example.test/x',
+        {
+          counts: { rows: 0, fetchable: 500 },
+          budget: { pageLimit: 500, maxDepth: 10, maxRows: 5000 },
+        },
+      ],
+    ];
+
+    for (const [url, overrides] of cases) {
+      const decision = decideEnqueue(input({ candidate: candidate(url), ...overrides }));
+      if (!decision.accept) emitted.add(decision.skipReason);
+    }
+
+    expect(emitted.size).toBeGreaterThanOrEqual(8);
+    for (const reason of emitted) {
+      expect(SKIP_REASONS, `${reason} is not in the database enum`).toContain(reason);
+    }
+    // And both new ones actually fired, so this is not vacuous.
+    expect(emitted).toContain('url_too_long');
+    expect(emitted).toContain('budget_exhausted');
+  });
+
+  it('every SKIP_REASON has an operator-facing label', () => {
+    for (const reason of SKIP_REASONS) {
+      expect(SKIP_REASON_LABELS[reason], reason).toBeTruthy();
+    }
   });
 });
