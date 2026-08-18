@@ -125,3 +125,4 @@ ADRs, docs, code.
 | [0038](ADR-0038-url-length-ceiling.md)               | A URL over the admission ceiling has no crawl identity      | Accepted |
 | [0039](ADR-0039-robots-matcher-step-budget.md)       | A robots pattern too costly to evaluate is presumed matched | Accepted |
 | [0040](ADR-0040-robots-fail-open-defects.md)         | Three ways the robots parser failed open                    | Accepted |
+| [0041](ADR-0041-query-identity-preserves-bytes.md)   | A query value is octets; normalising it must not decode     | Accepted |

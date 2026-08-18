@@ -197,7 +197,13 @@ export function normaliseUrl(input: string, options: NormaliseOptions = {}): str
   path = normalisePercentEncoding(path);
 
   // -- Query ----------------------------------------------------------------
-  const query = normaliseQuery(url.searchParams);
+  // ⚠️ `url.search`, THE RAW STRING — NOT `url.searchParams`.
+  //
+  // Reading `searchParams` decodes each value into a JS string, and a byte that
+  // is not valid UTF-8 has no character to decode to, so it becomes U+FFFD and
+  // re-encodes as `%EF%BF%BD`. That is lossy and irreversible, and it is why
+  // this argument is a string. See `normaliseQuery`.
+  const query = normaliseQuery(url.search);
 
   // -- Fragment -------------------------------------------------------------
   // ⚠️ ALWAYS DROPPED. `/page#one` and `/page#two` are ONE HTTP resource: the
@@ -238,13 +244,55 @@ export function normaliseUrl(input: string, options: NormaliseOptions = {}): str
  * It is tempting, it collapses infinite query spaces instantly, and it is
  * wrong — `?product=1234` is a different product. Query explosion is bounded by
  * the frontier's caps, not by pretending pages are the same.
+ *
+ * ⚠️ AND IT TAKES THE RAW SEARCH STRING, WHICH IS THE WHOLE POINT.
+ *
+ * This used to take a `URLSearchParams` and rebuild it. Iterating one decodes
+ * every value into a JS string, and **a byte that is not valid UTF-8 has no
+ * character to decode to** — it becomes U+FFFD, which re-encodes as
+ * `%EF%BF%BD`. The original byte is gone.
+ *
+ * Measured (dev log 0018, ADR-0041): on a legacy Latin-1 site, `?q=Fran%E7ois`,
+ * `?q=Fran%E8ois` and `?q=Fran%E9ois` became **one** identity. All 128 bytes
+ * from 0x80 to 0xFF shared it. The same bytes in the *path* survived untouched,
+ * so the two halves of one URL were normalised under incompatible rules.
+ *
+ * That is not a cosmetic fold. `frontier.ts` stores only the normalised form and
+ * discards the original, so the crawler **fetches a URL the site never linked**,
+ * and the string keys the durable `site_pages(site_id, normalised_url)` index —
+ * permanent across crawls (AGENTS.md §5, horizon #1).
+ *
+ * So the query is treated as what it is on the wire: octets. Splitting on `&`
+ * and `=` needs no decoding, and `normalisePercentEncoding` canonicalises the
+ * escapes **without decoding anything outside the unreserved set** — a set that
+ * contains no delimiter, so it can never manufacture a `&` or an `=`.
  */
-function normaliseQuery(params: URLSearchParams): string {
-  const kept: [string, string][] = [];
+function normaliseQuery(search: string): string {
+  const raw = search.startsWith('?') ? search.slice(1) : search;
+  if (raw.length === 0) return '';
 
-  for (const [name, value] of params) {
+  const kept: [name: string, value: string][] = [];
+
+  for (const pair of raw.split('&')) {
+    // `?a=1&&b=2` and a trailing `&` produce empty pairs, which are not
+    // parameters. `URLSearchParams` ignored them and so does this.
+    if (pair.length === 0) continue;
+
+    // The FIRST `=` separates; any later one is part of the value, because
+    // `?q=a=b` is a single parameter whose value contains an equals sign.
+    const equals = pair.indexOf('=');
+    const name = normaliseQueryOctets(equals === -1 ? pair : pair.slice(0, equals));
+    const value = normaliseQueryOctets(equals === -1 ? '' : pair.slice(equals + 1));
+
+    // ⚠️ MATCHED CASE-INSENSITIVELY, DELIBERATELY, AND THE REASON IS PHPSESSID.
+    // PHP's cookieless session parameter is literally `PHPSESSID` — uppercase —
+    // and `JSESSIONID`, `CFID` and `CFTOKEN` are the same. Matching the case a
+    // site actually writes would stop stripping them, and an unstripped session
+    // id is a new identity per visitor: unbounded, and strictly worse than the
+    // false strip it would prevent. ADR-0041 records the measurement.
     const lower = name.toLowerCase();
     if (TRACKING_SET.has(lower) || SESSION_SET.has(lower)) continue;
+
     kept.push([name, value]);
   }
 
@@ -254,21 +302,38 @@ function normaliseQuery(params: URLSearchParams): string {
   // order relative to each other.
   kept.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 
-  const rebuilt = new URLSearchParams();
-  for (const [name, value] of kept) rebuilt.append(name, value);
-
-  // `URLSearchParams` encodes a space as `+`; `%20` is what appears in a path
-  // and in most real links. Either is correct; consistency is what matters,
-  // because inconsistency is a duplicate row.
-  return `?${rebuilt.toString().replace(/\+/g, '%20')}`;
+  // `name=value` even where the input wrote a bare `name`, because `?q` and
+  // `?q=` are the same empty value to every server, and this is the spelling
+  // the previous implementation produced.
+  return `?${kept.map(([name, value]) => `${name}=${value}`).join('&')}`;
 }
 
 /**
- * Canonicalise percent-encoding in a path.
+ * Canonicalise one query name or value without decoding its bytes.
+ *
+ * `+` is a space in a query, which is the one substitution that must happen
+ * before anything else — `%20` is the spelling used here and in the path, and
+ * inconsistency between them is a duplicate row.
+ */
+function normaliseQueryOctets(component: string): string {
+  return normalisePercentEncoding(component.split('+').join('%20'));
+}
+
+/**
+ * Canonicalise percent-encoding in a path or a query component.
  *
  * `%2F` and `%2f` are the same byte; `%7E` and `~` are the same character.
  * Uppercase the hex digits (RFC 3986 §6.2.2.1) and decode the unreserved set,
  * so one page cannot arrive under four spellings.
+ *
+ * ⚠️ IT DECODES THE UNRESERVED SET AND NOTHING ELSE, which is what makes it
+ * safe on a query. That set is ALPHA / DIGIT / `-` / `.` / `_` / `~` and
+ * contains **no delimiter**, so decoding can never manufacture a `&`, `=`, `?`,
+ * `#` or `/` and turn one parameter into two. A byte outside it — `%E9`, `%C0`,
+ * a lone surrogate half — is left exactly as the site wrote it.
+ *
+ * A `%` not followed by two hex digits is not an escape and is not touched.
+ * `?q=%ZZ` and `?q=%25ZZ` are different URLs and stay different.
  */
 function normalisePercentEncoding(path: string): string {
   return path.replace(/%[0-9a-fA-F]{2}/g, (escape) => {

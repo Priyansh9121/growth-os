@@ -435,3 +435,198 @@ describe('normaliseUrl — the length ceiling', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// §6 the query identity collision — dev log 0018 finding 4, see ADR-0041
+// ---------------------------------------------------------------------------
+
+describe('⚠️ query values keep their bytes — URL identity is singular', () => {
+  it('⚠️ five distinct URLs must not share two identities', () => {
+    // Dev log 0018, measured on a legacy Latin-1 site. `URLSearchParams`
+    // decodes to a JS string, so every byte that is not valid UTF-8 becomes
+    // U+FFFD and re-encodes as %EF%BF%BD. Five pages, two rows.
+    const five = [
+      'https://example.test/search?q=Fran%E7ois',
+      'https://example.test/search?q=Fran%E8ois',
+      'https://example.test/search?q=Fran%E9ois',
+      'https://example.test/search?q=caf%E9',
+      'https://example.test/search?q=caf%E8',
+    ];
+
+    const identities = new Set(five.map((input) => normaliseUrl(input)));
+    expect(identities.size).toBe(five.length);
+
+    // And each one is itself, not a replacement character.
+    expect(normaliseUrl(five[0]!)).toBe('https://example.test/search?q=Fran%E7ois');
+    expect(normaliseUrl(five[3]!)).toBe('https://example.test/search?q=caf%E9');
+  });
+
+  it('⚠️ the same bytes in the path and in the query now agree', () => {
+    // The asymmetry was the clearest statement of the defect: one URL, two
+    // halves, incompatible rules.
+    expect(normaliseUrl('https://example.test/produits/caf%E9')).toBe(
+      'https://example.test/produits/caf%E9',
+    );
+    expect(normaliseUrl('https://example.test/produits?nom=caf%E9')).toBe(
+      'https://example.test/produits?nom=caf%E9',
+    );
+  });
+
+  it('⚠️ PROPERTY: 256 single-byte query values produce 256 identities', () => {
+    // The strong form. Before this fix the 128 bytes 0x80–0xFF shared ONE
+    // identity, so this asserted 129.
+    const inputs = Array.from(
+      { length: 256 },
+      (_, b) => `https://e.test/s?q=%${b.toString(16).toUpperCase().padStart(2, '0')}`,
+    );
+    const identities = new Set(inputs.map((input) => normaliseUrl(input)));
+    expect(identities.size).toBe(256);
+  });
+
+  it('⚠️ PROPERTY: no two distinct URLs share an identity across a non-UTF-8 corpus', () => {
+    // Every high byte, in three positions: alone, embedded in a word, and
+    // beside a second parameter. 99.2 % of these collided before.
+    const corpus: string[] = [];
+    for (let b = 0x80; b <= 0xff; b++) {
+      const hex = b.toString(16).toUpperCase().padStart(2, '0');
+      corpus.push(`https://e.test/s?q=caf%${hex}`);
+      corpus.push(`https://e.test/s?q=Fran%${hex}ois`);
+      corpus.push(`https://e.test/s?a=%${hex}&b=1`);
+    }
+
+    const byIdentity = new Map<string, string[]>();
+    for (const input of corpus) {
+      const id = normaliseUrl(input);
+      expect(id).not.toBeNull();
+      byIdentity.set(id!, [...(byIdentity.get(id!) ?? []), input]);
+    }
+
+    const collisions = [...byIdentity.entries()].filter(([, xs]) => xs.length > 1);
+    expect(collisions, `collisions: ${JSON.stringify(collisions.slice(0, 3))}`).toEqual([]);
+    expect(byIdentity.size).toBe(corpus.length);
+  });
+
+  it('⚠️ a malformed escape is no longer confused with the escaped percent', () => {
+    // `%ZZ` is not an escape. Decoding it to `%` and re-encoding produced
+    // `%25ZZ` — the identity of a genuinely different URL.
+    expect(normaliseUrl('https://e.test/s?q=%ZZ')).not.toBe(
+      normaliseUrl('https://e.test/s?q=%25ZZ'),
+    );
+    expect(normaliseUrl('https://e.test/s?q=%')).not.toBe(normaliseUrl('https://e.test/s?q=%25'));
+  });
+
+  describe('hostile query input (§6)', () => {
+    it.each([
+      ['a lone surrogate', 'q=%ED%A0%80', 'https://e.test/s?q=%ED%A0%80'],
+      ['overlong UTF-8', 'q=%C0%80', 'https://e.test/s?q=%C0%80'],
+      ['a truncated escape', 'q=%ZZ', 'https://e.test/s?q=%ZZ'],
+      ['a bare percent', 'q=%', 'https://e.test/s?q=%'],
+      ['a one-digit escape', 'q=%A', 'https://e.test/s?q=%A'],
+      ['mixed valid and invalid bytes', 'q=caf%C3%A9%E9', 'https://e.test/s?q=caf%C3%A9%E9'],
+      ['a value that is entirely escapes', 'q=%E7%E8%E9', 'https://e.test/s?q=%E7%E8%E9'],
+      ['a NUL byte', 'q=%00', 'https://e.test/s?q=%00'],
+      ['hex case is canonicalised', 'q=%e7', 'https://e.test/s?q=%E7'],
+    ])('%s survives: %s', (_label, query, expected) => {
+      expect(normaliseUrl(`https://e.test/s?${query}`)).toBe(expected);
+    });
+
+    it('⚠️ keeps the halves of a surrogate pair split across two parameters apart', () => {
+      // Each half is invalid UTF-8 alone, so both used to become U+FFFD and the
+      // two parameters became indistinguishable.
+      const high = normaliseUrl('https://e.test/s?a=%ED%A0%BD');
+      const low = normaliseUrl('https://e.test/s?a=%ED%B8%80');
+      expect(high).not.toBe(low);
+      expect(normaliseUrl('https://e.test/s?a=%ED%A0%BD&b=%ED%B8%80')).toBe(
+        'https://e.test/s?a=%ED%A0%BD&b=%ED%B8%80',
+      );
+    });
+
+    it('⚠️ decoding can never manufacture a query delimiter', () => {
+      // The property that makes byte-preserving normalisation safe: only the
+      // RFC 3986 unreserved set is decoded, and it contains no delimiter. If
+      // `%26` decoded, one parameter would silently become two.
+      expect(normaliseUrl('https://e.test/s?q=a%26b%3Dc')).toBe('https://e.test/s?q=a%26b%3Dc');
+      expect(normaliseUrl('https://e.test/s?q=a%23b')).toBe('https://e.test/s?q=a%23b');
+      expect(normaliseUrl('https://e.test/s?q=a%3Fb')).toBe('https://e.test/s?q=a%3Fb');
+    });
+  });
+
+  describe('the query still does its job', () => {
+    it('strips tracking beside a non-UTF-8 value', () => {
+      expect(normaliseUrl('https://e.test/s?utm_source=g&q=caf%E9&gclid=X')).toBe(
+        'https://e.test/s?q=caf%E9',
+      );
+    });
+
+    it('sorts by name with non-UTF-8 values present', () => {
+      expect(normaliseUrl('https://e.test/s?b=caf%E9&a=caf%E8')).toBe(
+        'https://e.test/s?a=caf%E8&b=caf%E9',
+      );
+    });
+
+    it('preserves repeat order with non-UTF-8 values', () => {
+      expect(normaliseUrl('https://e.test/s?tag=%E9&tag=%E8')).toBe(
+        'https://e.test/s?tag=%E9&tag=%E8',
+      );
+      expect(normaliseUrl('https://e.test/s?tag=%E8&tag=%E9')).toBe(
+        'https://e.test/s?tag=%E8&tag=%E9',
+      );
+    });
+
+    it('still folds + and %20 to one spelling', () => {
+      expect(normaliseUrl('https://e.test/s?q=caf%E9+x')).toBe(
+        normaliseUrl('https://e.test/s?q=caf%E9%20x'),
+      );
+    });
+
+    it('⚠️ the strip list stays case-INSENSITIVE, and PHPSESSID is why', () => {
+      // Measured: PHP's default cookieless session parameter is literally
+      // `PHPSESSID`, uppercase. Matching case-sensitively would stop stripping
+      // it, and an unstripped session id is a new identity per visitor —
+      // unbounded, and strictly worse than the case it would fix. See ADR-0041.
+      expect(normaliseUrl('https://e.test/p?PHPSESSID=abc')).toBe('https://e.test/p');
+      expect(normaliseUrl('https://e.test/p?JSESSIONID=abc')).toBe('https://e.test/p');
+      expect(normaliseUrl('https://e.test/p?CFID=1&CFTOKEN=2')).toBe('https://e.test/p');
+      expect(normaliseUrl('https://e.test/p?UTM_SOURCE=g')).toBe('https://e.test/p');
+    });
+  });
+
+  it('⚠️ PROPERTY: the identity is a fixed point the fetcher will agree with', () => {
+    // The stored string is re-parsed later by admitUrl and by the fetcher. If
+    // `new URL()` rewrote it, the row we stored would not be the URL we ask
+    // for — a different way of storing an identity nobody linked.
+    const inputs = [
+      'https://e.test/s?q=%',
+      'https://e.test/s?q=%A',
+      'https://e.test/s?q=%ZZ',
+      'https://e.test/s?q=~',
+      'https://e.test/s?q=%7E',
+      'https://e.test/s?a=1;b=2',
+      'https://e.test/s?q=caf%E9',
+      'https://e.test/s?q=%FF',
+      'https://e.test/s?q=%00',
+      'https://e.test/s?q=%C0%80',
+      'https://e.test/s?q=a%20b',
+      'https://e.test/s?q=%2B',
+      'https://e.test/s?q=%5B%5D',
+      'https://e.test/s?q=%22',
+    ];
+
+    for (const input of inputs) {
+      const id = normaliseUrl(input);
+      expect(id, input).not.toBeNull();
+      expect(normaliseUrl(id!), `not idempotent: ${input}`).toBe(id);
+      expect(new URL(id!).href, `href rewrites the identity: ${input}`).toBe(id);
+    }
+  });
+
+  it('leaves URLs with no query exactly as they were', () => {
+    // The regression guard: this change must be invisible to everything that
+    // is not a query.
+    expect(normaliseUrl('https://e.test/produits/caf%E9')).toBe('https://e.test/produits/caf%E9');
+    expect(normaliseUrl('https://e.test/a/../b')).toBe('https://e.test/b');
+    expect(normaliseUrl('HTTPS://E.TEST:443/x/')).toBe('https://e.test/x/');
+    expect(normaliseUrl('https://e.test/a%7Eb')).toBe('https://e.test/a~b');
+    expect(normaliseUrl('https://e.test./x')).toBe('https://e.test/x');
+  });
+});
