@@ -31,8 +31,21 @@
  * closed; the two-pointer scan is what makes that budget a small number rather
  * than an arbitrary one.
  *
+ * ⚠️ AND THE "EVERY AMBIGUITY" CLAIM ABOVE WAS FALSE THREE TIMES.
+ * The audit in dev log 0018 found two places where this file failed *open*, and
+ * measuring them found a third. A directive missing its colon was ignored, so
+ * `Disallow /admin` fetched `/admin/customers`. The byte cap cut the last line
+ * mid-value and kept the stump, so `Allow: /private-public-page` became
+ * `Allow: /private` and opened a subtree. And two groups naming the same agent
+ * were not combined, so a rule in the second was discarded — with a colon on
+ * every line, and with the answer depending on file order.
+ *
+ * None was a subtle bug in the matcher. All three were the parser deciding, in
+ * silence, that something it could not read was something it need not obey.
+ *
  * @see docs/decisions/ADR-0035-robots-and-politeness.md
  * @see docs/decisions/ADR-0039-robots-matcher-step-budget.md
+ * @see docs/decisions/ADR-0040-robots-fail-open-defects.md
  */
 
 import { MAX_URL_LENGTH } from '@growth-os/net';
@@ -194,6 +207,62 @@ export interface RobotsVerdict {
 // Parsing
 // ---------------------------------------------------------------------------
 
+/** The first space or tab in `s`, or -1. Two `indexOf` scans, no regex. */
+function firstWhitespace(s: string): number {
+  const space = s.indexOf(' ');
+  const tab = s.indexOf('\t');
+  if (space === -1) return tab;
+  if (tab === -1) return space;
+  return space < tab ? space : tab;
+}
+
+/**
+ * Split a directive line into its field name and value.
+ *
+ * ⚠️ A MISSING COLON USED TO FAIL OPEN, WHICH IS THE WRONG DIRECTION.
+ *
+ * RFC 9309 requires the colon, so ignoring `Disallow /admin` was conformant —
+ * and measured (dev log 0018), it meant `/admin/customers` was **fetched**
+ * while Googlebot refused it. `User-agent *` was worse: it produced no group at
+ * all, so every rule in the file belonged to nothing and the whole file
+ * evaluated as `no_group_matched`.
+ *
+ * ⚠️ WHICH STANDARD WINS, STATED ONCE. Where RFC 9309 and Google's parser
+ * disagree, this file follows **whichever refuses more**, because a site owner
+ * writes robots.txt to be obeyed and tests it against Google. `maxBytes` is
+ * already justified in this file as Google's ceiling, "the least surprising
+ * choice for a site owner who tested against Google"; this is the same argument
+ * applied to a case where the surprise would be us fetching their admin panel.
+ *
+ * ⚠️ THE COLON STILL WINS WHEREVER IT APPEARS. Taking the first whitespace
+ * instead would turn `Disallow : /admin` — which parses correctly today — into
+ * the value `: /admin`, matching nothing. That would be a fail-open introduced
+ * by the fail-open fix.
+ *
+ * ⚠️ AND WHITESPACE SEPARATES ONLY WHEN THE LINE IS EXACTLY TWO TOKENS.
+ * Otherwise `Disallow the admin area please` becomes a rule, and so does any
+ * sentence someone forgot to comment out. Google's parser has the same
+ * restriction for the same reason. A value that legitimately contains a space
+ * is therefore never split — the line is ignored instead, which is what it was
+ * before.
+ *
+ * @see docs/decisions/ADR-0040-robots-fail-open-defects.md
+ */
+function splitDirective(line: string): readonly [field: string, value: string] | null {
+  const colon = line.indexOf(':');
+  if (colon !== -1) {
+    return [line.slice(0, colon).trim().toLowerCase(), line.slice(colon + 1).trim()];
+  }
+
+  const space = firstWhitespace(line);
+  if (space === -1) return null;
+
+  const value = line.slice(space + 1).trim();
+  if (value.length === 0 || firstWhitespace(value) !== -1) return null;
+
+  return [line.slice(0, space).trim().toLowerCase(), value];
+}
+
 /**
  * Parse a robots.txt body.
  *
@@ -211,6 +280,25 @@ export function parseRobotsTxt(
   if (body.length > limits.maxBytes) {
     body = body.slice(0, limits.maxBytes);
     truncated = true;
+
+    // ⚠️ THE CUT IS A CHARACTER OFFSET AND THE FILE HAS LINE STRUCTURE.
+    //
+    // `slice` cannot see where a directive ends, so the last line it leaves is
+    // half a directive — and half a directive is a *different* directive.
+    // Measured (dev log 0018): a cut inside `Allow: /private-public-page`
+    // leaves `Allow: /private`, which ties `Disallow: /private` on effective
+    // length, wins the tie because Allow wins ties, and opens the whole
+    // subtree. The stump is a rule the site never wrote.
+    //
+    // So the partial line is discarded. Every rule that survives is one the
+    // site wrote in full. ⚠️ This is NOT rejecting the file — ADR-0035 is
+    // explicit that a file over the cap is truncated and the rules we read
+    // still apply. It is refusing to invent the one rule we did not read.
+    //
+    // No line break inside the cap means nothing was read to the end of a
+    // line, so there is nothing trustworthy to keep.
+    const lastBreak = Math.max(body.lastIndexOf('\n'), body.lastIndexOf('\r'));
+    body = lastBreak === -1 ? '' : body.slice(0, lastBreak);
   }
 
   // A UTF-8 BOM survives decoding and would become part of the first field
@@ -258,11 +346,10 @@ export function parseRobotsTxt(
     const line = (hash === -1 ? raw : raw.slice(0, hash)).trim();
     if (line.length === 0) continue;
 
-    const colon = line.indexOf(':');
-    if (colon === -1) continue; // Not a directive. Ignored, never an error.
+    const directive = splitDirective(line);
+    if (directive === null) continue; // Not a directive. Ignored, never an error.
 
-    const field = line.slice(0, colon).trim().toLowerCase();
-    const value = line.slice(colon + 1).trim();
+    const [field, value] = directive;
 
     switch (field) {
       case 'user-agent':
@@ -344,22 +431,48 @@ export function selectGroup(
 ): RobotsGroup | null {
   const token = userAgent.toLowerCase();
 
-  let specific: RobotsGroup | null = null;
-  let specificLength = -1;
-  let wildcard: RobotsGroup | null = null;
+  const namesUs = rules.groups.some((group) => group.agents.includes(token));
+  const winner = namesUs ? token : '*';
 
-  for (const group of rules.groups) {
-    for (const agent of group.agents) {
-      if (agent === token && agent.length > specificLength) {
-        specific = group;
-        specificLength = agent.length;
-      } else if (agent === '*' && wildcard === null) {
-        wildcard = group;
-      }
-    }
+  const matching = rules.groups.filter((group) => group.agents.includes(winner));
+  if (matching.length === 0) return null;
+
+  // ⚠️ EVERY GROUP NAMING THE WINNER, COMBINED — RFC 9309 §2.2.1 requires it,
+  // and returning only the first was a fail-open with a colon on every line.
+  //
+  // Measured: `User-agent: * / Allow: / / User-agent: * / Disallow: /admin`
+  // returned the first group alone, so `Disallow: /admin` was discarded and
+  // `/admin/customers` was **fetched**. Swapping the two rules refused it — the
+  // verdict depended on which duplicate the file happened to list first, which
+  // is not a property a permission boundary may have.
+  //
+  // Repeated groups are ordinary in generated files: a plugin appends a block,
+  // a theme appends another, and both write `User-agent: *`.
+  return {
+    // The token whose rules these are, not the agent lists they came from. One
+    // group's `agents` no longer describes a merged view of several.
+    agents: [winner],
+    rules: matching.flatMap((group) => group.rules),
+    crawlDelaySeconds: mergeCrawlDelay(matching),
+  };
+}
+
+/**
+ * The crawl-delay for a set of merged groups: the **longest** any of them
+ * declared, or null if none did.
+ *
+ * ⚠️ THE MAXIMUM, NOT THE FIRST. Duplicated groups declaring different delays
+ * is an ambiguity, and ADR-0035 makes the direction unambiguous: `Crawl-delay`
+ * may only ever slow us down, never speed us up. Taking whichever came first
+ * would let file order decide how hard we hit someone's server.
+ */
+function mergeCrawlDelay(groups: readonly RobotsGroup[]): number | null {
+  let longest: number | null = null;
+  for (const group of groups) {
+    const declared = group.crawlDelaySeconds;
+    if (declared !== null && (longest === null || declared > longest)) longest = declared;
   }
-
-  return specific ?? wildcard;
+  return longest;
 }
 
 // ---------------------------------------------------------------------------
