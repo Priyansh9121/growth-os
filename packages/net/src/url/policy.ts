@@ -133,8 +133,15 @@ export function isSensitiveParameter(name: string): boolean {
   return parameterWords(name).some((word) => SENSITIVE_SET.has(word));
 }
 
-/** A URL longer than this is a generator, not a page. */
-const MAX_URL_LENGTH = 2048;
+/**
+ * A URL longer than this is a generator, not a page.
+ *
+ * ⚠️ EXPORTED BECAUSE `normaliseUrl` ENFORCES THE SAME NUMBER. It is the crawl
+ * identity limit as well as the admission limit, and the two must agree: a URL
+ * the frontier stores and later cannot fetch is a row that can only ever fail.
+ * Two constants that must match is how they stop matching (ADR-0038).
+ */
+export const MAX_URL_LENGTH = 2048;
 /** Longer than the DNS maximum; nothing beyond it can resolve. */
 const MAX_HOST_LENGTH = 253;
 

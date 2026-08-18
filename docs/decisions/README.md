@@ -122,3 +122,4 @@ ADRs, docs, code.
 | [0035](ADR-0035-robots-and-politeness.md)            | Fail closed on unreadable robots.txt, and politeness      | Accepted |
 | [0036](ADR-0036-frontier-budget-and-ceiling.md)      | page_limit counts pages fetched, and the frontier ceiling | Accepted |
 | [0037](ADR-0037-structural-verification-matching.md) | Verification matches a parsed document, not a pattern     | Accepted |
+| [0038](ADR-0038-url-length-ceiling.md)               | A URL over the admission ceiling has no crawl identity    | Accepted |

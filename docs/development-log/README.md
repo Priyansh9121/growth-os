@@ -48,3 +48,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0016](0016-the-network-boundary-and-the-crawl-model.md) | The network boundary, crawl model and robots.txt | 2026-08-17 |
 | [0017](0017-the-permission-boundary-was-a-regex.md)      | The permission boundary was a regex              | 2026-08-17 |
 | [0018](0018-the-regex-sweep.md)                          | The regex sweep, and what it actually found      | 2026-08-17 |
+| [0019](0019-the-url-length-ceiling.md)                   | The URL length ceiling, and two caps             | 2026-08-18 |
