@@ -8,7 +8,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { MAX_URL_LENGTH } from '@growth-os/net';
 import { normaliseUrl, STRIPPED_PARAMETERS, urlDepth } from './normalise';
+import { isAllowed, parseRobotsTxt } from '../robots/parse';
 import { classifyScope, crawlScope, isFetchable, redirectGuard } from './scope';
 
 describe('normaliseUrl', () => {
@@ -312,6 +314,111 @@ describe('crawl scope', () => {
       expect(guard(new URL('https://www.example.test/a'), new URL('https://other.test/b'))).toBe(
         false,
       );
+    });
+  });
+});
+
+/**
+ * The length ceiling.
+ *
+ * WHY THIS SUITE EXISTS AT ALL
+ * Not to validate input. The regex sweep (dev log 0018) measured `isAllowed`
+ * blocking the event loop for over twelve seconds against a hostile robots.txt
+ * and a long path, because the matcher is O(rules × pattern × target) and
+ * `target` had no bound. This ceiling is where that bound lives.
+ *
+ * @see docs/decisions/ADR-0038-url-length-ceiling.md
+ */
+describe('normaliseUrl — the length ceiling', () => {
+  const origin = 'https://x.test/';
+  const atCap = origin + 'a'.repeat(MAX_URL_LENGTH - origin.length);
+
+  describe('the boundary', () => {
+    it('accepts a URL of exactly MAX_URL_LENGTH', () => {
+      expect(atCap.length).toBe(MAX_URL_LENGTH);
+      expect(normaliseUrl(atCap)).toBe(atCap);
+    });
+
+    it('refuses one character over', () => {
+      const oneOver = origin + 'a'.repeat(MAX_URL_LENGTH - origin.length + 1);
+      expect(oneOver.length).toBe(MAX_URL_LENGTH + 1);
+      expect(normaliseUrl(oneOver)).toBeNull();
+    });
+
+    it('⚠️ refuses a URL under the cap on input that exceeds it after normalising', () => {
+      // `+` becomes `%20` in the query — measured at 2.98× on this shape. A cap
+      // applied only to the input would let this through and store 3,018
+      // characters in a column bounded at 2,048.
+      const input = `${origin}?q=${'+'.repeat(1_000)}`;
+      expect(input.length).toBeLessThan(MAX_URL_LENGTH);
+      expect(normaliseUrl(input)).toBeNull();
+    });
+
+    it('a long input is refused before any normalisation work runs', () => {
+      // The point of the input cap: cost is incurred PRODUCING the output, so
+      // capping only the output does not bound the work.
+      const huge = `${origin}?q=${'+'.repeat(500_000)}`;
+      const started = performance.now();
+      expect(normaliseUrl(huge)).toBeNull();
+      expect(performance.now() - started).toBeLessThan(50);
+    });
+
+    it('trims before measuring, so whitespace does not consume the budget', () => {
+      expect(normaliseUrl(`   ${atCap}   `)).toBe(atCap);
+    });
+
+    it('applies the ceiling to the resolved URL, not the relative href', () => {
+      // A six-character href is under any input cap. What gets stored is the
+      // resolution, so that is what the ceiling has to measure.
+      const base = `${origin}${'d'.repeat(2_100)}/`;
+      const resolved = `${origin}${'d'.repeat(2_100)}/page`;
+      expect('./page'.length).toBeLessThan(MAX_URL_LENGTH);
+      expect(resolved.length).toBeGreaterThan(MAX_URL_LENGTH);
+      expect(normaliseUrl('./page', { base })).toBeNull();
+    });
+  });
+
+  describe('⚠️ the property that matters: the matcher cannot be reached with a long target', () => {
+    // The exact corpus from dev log 0018 — 255 surviving rules of the shape
+    // that defeats the two-pointer scan: long literal runs either side of one
+    // star, so every star retry re-compares the whole literal.
+    const rule = `Disallow: /${'a'.repeat(1_000)}*${'a'.repeat(1_000)}b`;
+    const robots = parseRobotsTxt(`User-agent: *\n${`${rule}\n`.repeat(300)}`);
+
+    it('parses to the corpus the measurement was taken against', () => {
+      expect(robots.truncated).toBe(true);
+      expect(robots.groups[0]?.rules.length).toBe(255);
+    });
+
+    it('refuses the 10,000-character path that cost over twelve seconds', () => {
+      const hostile = origin + 'a'.repeat(10_000 - origin.length);
+      // null means `isAllowed` is never called with it — decide.ts:116 returns
+      // before decide.ts:150. This is the strong property: not "it was
+      // validated" but "the expensive input cannot arrive".
+      expect(normaliseUrl(hostile)).toBeNull();
+    });
+
+    it('costs bounded time at the ceiling against the same hostile corpus', () => {
+      // Measured on the capped path only, because the uncapped one is the bug.
+      const started = performance.now();
+      const verdict = isAllowed(robots, atCap);
+      const elapsed = performance.now() - started;
+
+      // ⚠️ THE VERDICT IS DELIBERATELY NOT ASSERTED. This corpus returns
+      // `allowed: false`, and not because of the 255 hostile rules: the
+      // 512,000-byte parse cap cuts the last rule mid-pattern, leaving a
+      // 420-character `Disallow: /aaa…` with its `*` and its final `b` gone.
+      // Unanchored patterns are prefix matches, so that stump matches. It is
+      // the truncation defect from dev log 0018 — the next brief, not this one.
+      // Asserting a boolean governed by a known separate defect would make this
+      // test fail when that defect is fixed, for a reason unrelated to what it
+      // covers.
+      expect(verdict.reason).toBe('longest_match');
+
+      // Observed ~63 ms at the cap against ~16,800 ms at 10,000 characters on
+      // this machine. The threshold asserts the collapse in order of magnitude,
+      // not a machine-specific number.
+      expect(elapsed).toBeLessThan(1_000);
     });
   });
 });

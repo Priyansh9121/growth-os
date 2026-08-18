@@ -20,7 +20,10 @@
  * fetched because it normalised cleanly.
  *
  * @see docs/decisions/ADR-0033-url-normalisation.md
+ * @see docs/decisions/ADR-0038-url-length-ceiling.md
  */
+
+import { MAX_URL_LENGTH } from '@growth-os/net';
 
 /**
  * Acquisition-only parameters, stripped for identity.
@@ -130,13 +133,27 @@ export interface NormaliseOptions {
  * Reduce a URL to its crawl identity, or `null` if it is not one.
  *
  * `null` means "not a crawlable resource" — a `mailto:`, a `javascript:`, an
- * anchor-only `#section`, an unparseable string. Never a repaired guess: a
- * half-parsed URL that "looks close" enqueues the wrong page, which is worse
- * than enqueueing none.
+ * anchor-only `#section`, an unparseable string, or one longer than
+ * `MAX_URL_LENGTH`. Never a repaired guess: a half-parsed URL that "looks
+ * close" enqueues the wrong page, which is worse than enqueueing none.
  */
 export function normaliseUrl(input: string, options: NormaliseOptions = {}): string | null {
   const raw = input.trim();
   if (raw.length === 0) return null;
+
+  // ⚠️ THE CEILING IS CHECKED BEFORE ANY WORK, AND AGAIN AFTER.
+  //
+  // Before, because the cost is incurred PRODUCING the identity, not holding
+  // it: percent-decoding and query rebuilding are linear in input, and the
+  // robots matcher downstream is O(rules × pattern × target). Capping only the
+  // result would leave every one of those bills already paid. Measured: a
+  // hostile robots.txt against a 10,000-character path blocked the event loop
+  // for 16.8 s; at this ceiling the same corpus costs 63 ms.
+  //
+  // `MAX_URL_LENGTH` is imported, never redeclared. `admitUrl` enforces the
+  // same number at fetch time, and a frontier row the fetcher will always
+  // refuse is a row that can only ever fail (ADR-0038).
+  if (raw.length > MAX_URL_LENGTH) return null;
 
   // ⚠️ A FRAGMENT-ONLY HREF IS THE CURRENT PAGE, NOT A NEW ONE.
   // `<a href="#main">Skip to content</a>` appears on every accessible site on
@@ -187,7 +204,22 @@ export function normaliseUrl(input: string, options: NormaliseOptions = {}): str
   // fragment never leaves the browser. A crawler that kept it would fetch the
   // same bytes once per heading on a page with a table of contents.
 
-  return `${url.protocol}//${host}${port}${path}${query}`;
+  const normalised = `${url.protocol}//${host}${port}${path}${query}`;
+
+  // ⚠️ AND AGAIN, BECAUSE NORMALISING CAN GROW A URL.
+  //
+  // `+` becomes `%20` in the query — measured at 2.98× on a query of plus
+  // signs, so a 1,018-character input yields 3,018 characters of identity. The
+  // input check cannot see that, and this string is what gets stored.
+  //
+  // `crawl_pages` and `site_pages` carry CHECK length(…) <= 2048;
+  // `crawl_frontier` does NOT, so on the enqueue path this check is the only
+  // thing keeping the stored identity inside the ceiling (ADR-0038).
+  //
+  // A relative href resolved against a long base reaches here the same way.
+  if (normalised.length > MAX_URL_LENGTH) return null;
+
+  return normalised;
 }
 
 /**
