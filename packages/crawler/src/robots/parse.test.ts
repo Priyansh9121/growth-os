@@ -11,16 +11,22 @@
  * stranger's server, and the crawler is the thing that asked for it.
  */
 
+import { MAX_URL_LENGTH } from '@growth-os/net';
 import { describe, expect, it } from 'vitest';
 import {
   ALLOW_ALL,
   DEFAULT_ROBOTS_LIMITS,
+  DEFAULT_STEP_BUDGETS,
   isAllowed,
-  matchesPattern,
+  matchPattern,
   parseRobotsTxt,
   selectGroup,
   USER_AGENT_TOKEN,
 } from './parse';
+
+/** `matchPattern` reports three outcomes; most cases below only care about two. */
+const matches = (pattern: string, target: string): boolean =>
+  matchPattern(pattern, target).outcome === 'match';
 
 const url = (path: string): string => `https://example.test${path}`;
 
@@ -251,7 +257,7 @@ describe('isAllowed — RFC 9309 precedence', () => {
   });
 });
 
-describe('matchesPattern — the only two metacharacters', () => {
+describe('matchPattern — the only two metacharacters', () => {
   it.each([
     ['/admin', '/admin', true],
     ['/admin', '/admin/users', true], // unanchored patterns are prefixes
@@ -267,22 +273,22 @@ describe('matchesPattern — the only two metacharacters', () => {
     ['/*.php$', '/a.php?x=1', false],
     ['/', '/anything', true],
   ])('%s vs %s -> %s', (pattern, target, expected) => {
-    expect(matchesPattern(pattern, target)).toBe(expected);
+    expect(matches(pattern, target)).toBe(expected);
   });
 
   it('treats regex metacharacters as literals', () => {
     // A regex implementation would give these meanings robots.txt does not.
-    expect(matchesPattern('/a.b', '/axb')).toBe(false);
-    expect(matchesPattern('/a.b', '/a.b')).toBe(true);
-    expect(matchesPattern('/a+b', '/aab')).toBe(false);
-    expect(matchesPattern('/[a]', '/[a]')).toBe(true);
-    expect(matchesPattern('/a(b)', '/a(b)')).toBe(true);
+    expect(matches('/a.b', '/axb')).toBe(false);
+    expect(matches('/a.b', '/a.b')).toBe(true);
+    expect(matches('/a+b', '/aab')).toBe(false);
+    expect(matches('/[a]', '/[a]')).toBe(true);
+    expect(matches('/a(b)', '/a(b)')).toBe(true);
   });
 
   it('handles consecutive and trailing stars', () => {
-    expect(matchesPattern('/a**b', '/axxb')).toBe(true);
-    expect(matchesPattern('/a*', '/a')).toBe(true);
-    expect(matchesPattern('/a*$', '/a')).toBe(true);
+    expect(matches('/a**b', '/axxb')).toBe(true);
+    expect(matches('/a*', '/a')).toBe(true);
+    expect(matches('/a*$', '/a')).toBe(true);
   });
 });
 
@@ -299,7 +305,7 @@ describe('hostile input', () => {
     const target = `/${'a'.repeat(4000)}`;
 
     const started = Date.now();
-    const result = matchesPattern(pattern, target);
+    const result = matches(pattern, target);
     const elapsed = Date.now() - started;
 
     expect(result).toBe(false);
@@ -405,5 +411,260 @@ describe('a real-world file', () => {
 
   it('exposes the sitemap for the frontier to seed from', () => {
     expect(parseRobotsTxt(robots).sitemaps).toEqual(['https://example.test/wp-sitemap.xml']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §6 the step budget — see ADR-0039
+// ---------------------------------------------------------------------------
+
+/** A 2,048-character URL of a shape a real site serves: deep path, faceted query. */
+const longRealisticPath = ((): string => {
+  let s = '/shop/category/plumbing/emergency/melbourne/inner-north/brunswick-east';
+  while (s.length < 900) s += `/sub-category-${s.length}`;
+  s += '?sort_by=price-ascending&page=7';
+  let i = 0;
+  while (s.length < MAX_URL_LENGTH) s += `&filter_attribute_${i++}=value-${i}`;
+  return s.slice(0, MAX_URL_LENGTH);
+})();
+
+/**
+ * The pattern that costs the most at the URL ceiling — a short prefix, one star,
+ * and a literal run half the length of the target, so every backtrack re-compares
+ * the whole run. Measured at 1,049,601 steps; see ADR-0039.
+ */
+const WORST_PATTERN = `/*${'a'.repeat(1023)}b`;
+const CEILING_PATH = `/${'a'.repeat(MAX_URL_LENGTH - 1)}`;
+
+/** Patterns of the shapes real robots.txt files use. */
+const REAL_WORLD_PATTERNS = [
+  '/wp-admin/',
+  '/wp-admin/admin-ajax.php',
+  '/wp-includes/',
+  '/*?replytocom=',
+  '/*/feed/',
+  '/*/trackback/',
+  '/*?s=',
+  '/cart/',
+  '/checkout/',
+  '/*add-to-cart=*',
+  '/*?orderby=*',
+  '/*?filter_*',
+  '/*?*oseid=*',
+  '/*preview_theme_id*',
+  '/collections/*sort_by*',
+  '/*/collections/*sort_by*',
+  '/w/index.php?title=*&action=edit',
+  '/*.pdf$',
+  '/*.php$',
+  '/*.json$',
+  '/*?utm_*',
+  '/*sessionid*',
+  '/*jsessionid*',
+  '/*/*/*/*/*',
+  '/services/rest/*/private/*',
+  '/documents/generated/reports/quarterly/internal-only/2024/q4/appendix/',
+  '/',
+  '/*',
+  '/*?*',
+];
+
+describe('matchPattern — the step budget', () => {
+  it('⚠️ no plausible legitimate pattern comes close to the budget', () => {
+    // The left-hand side of the line. Every real-world pattern shape, measured
+    // against the longest URL the crawler will ever admit — which is already
+    // adversarial for a real site, whose own URLs are two orders shorter.
+    const costs = REAL_WORLD_PATTERNS.map((pattern) => ({
+      pattern,
+      steps: matchPattern(pattern, longRealisticPath, Number.MAX_SAFE_INTEGER).steps,
+    }));
+
+    for (const { pattern, steps } of costs) {
+      expect(
+        steps,
+        `${pattern} cost ${steps} steps, budget is ${DEFAULT_STEP_BUDGETS.perPattern}`,
+      ).toBeLessThan(DEFAULT_STEP_BUDGETS.perPattern);
+    }
+
+    // Not merely under: an order of magnitude under, which is the headroom the
+    // budget number was chosen for (ADR-0039).
+    const worst = Math.max(...costs.map((c) => c.steps));
+    expect(worst).toBeLessThan(DEFAULT_STEP_BUDGETS.perPattern / 10);
+
+    // And none of them is refused.
+    for (const pattern of REAL_WORLD_PATTERNS) {
+      expect(matchPattern(pattern, longRealisticPath).outcome).not.toBe('budget_exhausted');
+    }
+  });
+
+  it('⚠️ the worst pattern at the URL ceiling is refused', () => {
+    // The right-hand side of the line. Unbudgeted this costs over a million
+    // steps for ONE rule; `page_limit` permits 10,000 URLs and `maxRules` 2,000.
+    const unbudgeted = matchPattern(WORST_PATTERN, CEILING_PATH, Number.MAX_SAFE_INTEGER);
+    expect(unbudgeted.steps).toBeGreaterThan(1_000_000);
+
+    const budgeted = matchPattern(WORST_PATTERN, CEILING_PATH);
+    expect(budgeted.outcome).toBe('budget_exhausted');
+    expect(budgeted.steps).toBeLessThanOrEqual(DEFAULT_STEP_BUDGETS.perPattern + 1);
+  });
+
+  it('a bounded pattern returns the same answer it always did', () => {
+    // The budget must be invisible to everything that fits inside it.
+    for (const [pattern, target, expected] of [
+      ['/admin', '/admin/users', true],
+      ['/admin', '/user/admin', false],
+      ['/*.php', '/a/b/c.php', true],
+      ['/*.php', '/index.html', false],
+      ['/x$', '/xy', false],
+    ] as const) {
+      expect(matchPattern(pattern, target).outcome).toBe(expected ? 'match' : 'no_match');
+    }
+  });
+
+  it('never reports a match it did not compute', () => {
+    // Exhaustion is a third answer, not a boolean. The whole point.
+    const outcomes = new Set([
+      matchPattern('/a', '/a').outcome,
+      matchPattern('/a', '/b').outcome,
+      matchPattern(WORST_PATTERN, CEILING_PATH).outcome,
+    ]);
+    expect(outcomes).toEqual(new Set(['match', 'no_match', 'budget_exhausted']));
+  });
+});
+
+describe('⚠️ isAllowed fails closed when the budget is exhausted', () => {
+  const hostile = `User-agent: *\nDisallow: ${WORST_PATTERN}\n`;
+  const ceilingUrl = `https://example.test${CEILING_PATH}`;
+
+  it('presumes a Disallow it could not evaluate MATCHED', () => {
+    // A budget exhaustion is an ambiguity, and parse.ts resolves every ambiguity
+    // toward not fetching. We do not know whether the rule matched, so we do not
+    // fetch.
+    const verdict = isAllowed(parseRobotsTxt(hostile), ceilingUrl);
+    expect(verdict.allowed).toBe(false);
+  });
+
+  it('reports the exhaustion, not a rule the operator can act on', () => {
+    // §5 facts vs findings: an operator asking "why was this skipped?" must not
+    // be told `longest_match`, which would mean their pattern decided it.
+    const verdict = isAllowed(parseRobotsTxt(hostile), ceilingUrl);
+    expect(verdict.reason).toBe('budget_exhausted');
+    // The pattern is still quoted verbatim — it is the fact that costs too much.
+    expect(verdict.rule).toBe(`Disallow: ${WORST_PATTERN}`);
+  });
+
+  it('⚠️ an Allow it could not evaluate grants nothing', () => {
+    // The asymmetry is the fail-closed direction. An unevaluable Disallow is
+    // presumed to match; an unevaluable Allow is presumed NOT to, because
+    // presuming it matched would hand out permission we never computed.
+    const robots = `User-agent: *\nDisallow: /\nAllow: ${WORST_PATTERN}\n`;
+    const verdict = isAllowed(parseRobotsTxt(robots), ceilingUrl);
+
+    expect(verdict.allowed).toBe(false);
+    expect(verdict.rule).toBe('Disallow: /');
+  });
+
+  it('a genuine Allow that is longer still wins — the answer is the same either way', () => {
+    // Precedence is not short-circuited by an exhaustion. If the presumed
+    // Disallow matched, the longer Allow beats it; if it did not, the Allow
+    // wins anyway. Refusing here would refuse a URL whose verdict is known.
+    const longerAllow = `/${'a'.repeat(1030)}`;
+    expect(longerAllow.length).toBeGreaterThan(WORST_PATTERN.length - 1);
+
+    const robots = `User-agent: *\nDisallow: ${WORST_PATTERN}\nAllow: ${longerAllow}\n`;
+    const verdict = isAllowed(parseRobotsTxt(robots), ceilingUrl);
+
+    expect(verdict.allowed).toBe(true);
+    expect(verdict.reason).toBe('longest_match');
+  });
+
+  it('⚠️ the budget can only ever refuse more, never permit more', () => {
+    // The strong property (§6). A cost control that could turn a refusal into a
+    // fetch would be a permission bug wearing a performance fix's clothes.
+    const unbounded = {
+      perPattern: Number.MAX_SAFE_INTEGER,
+      perEvaluation: Number.MAX_SAFE_INTEGER,
+    };
+    const files = [
+      'User-agent: *\nDisallow: /a\nAllow: /a/b\n',
+      `User-agent: *\nDisallow: ${WORST_PATTERN}\n`,
+      `User-agent: *\nAllow: ${WORST_PATTERN}\nDisallow: /\n`,
+      `User-agent: *\nDisallow: /*a*b*c\nAllow: ${WORST_PATTERN}\nDisallow: /aaa\n`,
+      'User-agent: *\nDisallow:\n',
+      `User-agent: *\n${`Disallow: /*${'a'.repeat(300)}b\n`.repeat(200)}`,
+    ];
+    const paths = ['/', '/a/b', CEILING_PATH, longRealisticPath, `/${'a'.repeat(500)}`];
+
+    for (const file of files) {
+      const rules = parseRobotsTxt(file);
+      for (const path of paths) {
+        const url = `https://example.test${path}`;
+        for (const budgets of [
+          DEFAULT_STEP_BUDGETS,
+          { perPattern: 1, perEvaluation: 1 },
+          { perPattern: 100, perEvaluation: 5_000 },
+          { perPattern: 10_000, perEvaluation: 100_000 },
+        ]) {
+          const bounded = isAllowed(rules, url, USER_AGENT_TOKEN, budgets);
+          if (bounded.allowed) {
+            expect(
+              isAllowed(rules, url, USER_AGENT_TOKEN, unbounded).allowed,
+              `budget ${JSON.stringify(budgets)} permitted ${path} where the unbudgeted matcher refused it`,
+            ).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
+  it('the shared allowance bounds the whole evaluation, not just one rule', () => {
+    // A per-rule budget alone leaves `maxRules x budget`, which is 2,000x the
+    // number that matters. The allowance is what makes the call bounded.
+    const many = `User-agent: *\n${`Disallow: /*${'a'.repeat(1023)}b\n`.repeat(300)}`;
+    const rules = parseRobotsTxt(many);
+    expect(rules.groups[0]?.rules.length).toBeGreaterThan(200);
+
+    const started = performance.now();
+    const verdict = isAllowed(rules, ceilingUrl);
+    const elapsed = performance.now() - started;
+
+    expect(verdict.allowed).toBe(false);
+    expect(verdict.reason).toBe('budget_exhausted');
+    // 4,096,000 steps at ~6 ns is ~25 ms; 500 ms is a wide margin for a loaded
+    // CI box and still two orders below the 5,277 ms this cost unbudgeted.
+    expect(elapsed).toBeLessThan(500);
+  });
+
+  it('⚠️ a hostile 604 KB robots.txt at the URL ceiling is bounded', () => {
+    // The corpus dev log 0018 measured at 12.5 s and ADR-0038 at 60.9 ms per
+    // call after the length cap. Rebuilt here byte for byte.
+    const corpus = `User-agent: *\n${`Disallow: /${'a'.repeat(1000)}*${'a'.repeat(1000)}b\n`.repeat(300)}`;
+    expect(corpus.length).toBe(604_214);
+
+    const rules = parseRobotsTxt(corpus);
+    expect(rules.truncated).toBe(true);
+
+    const started = performance.now();
+    isAllowed(rules, ceilingUrl);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(500);
+  });
+
+  it('leaves a realistic robots.txt entirely alone', () => {
+    // The negative control. If the budget changed any verdict here it would be
+    // refusing pages on ordinary customer sites.
+    const realistic = `User-agent: *\n${REAL_WORLD_PATTERNS.map((p) => `Disallow: ${p}`).join('\n')}\n`;
+    const rules = parseRobotsTxt(realistic);
+    const unbounded = {
+      perPattern: Number.MAX_SAFE_INTEGER,
+      perEvaluation: Number.MAX_SAFE_INTEGER,
+    };
+
+    for (const path of ['/', '/about', '/wp-admin/options.php', '/cart/', longRealisticPath]) {
+      const url = `https://example.test${path}`;
+      expect(isAllowed(rules, url)).toEqual(isAllowed(rules, url, USER_AGENT_TOKEN, unbounded));
+      expect(isAllowed(rules, url).reason).not.toBe('budget_exhausted');
+    }
   });
 });

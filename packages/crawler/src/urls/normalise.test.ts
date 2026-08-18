@@ -413,11 +413,20 @@ describe('normaliseUrl — the length ceiling', () => {
       // Asserting a boolean governed by a known separate defect would make this
       // test fail when that defect is fixed, for a reason unrelated to what it
       // covers.
-      expect(verdict.reason).toBe('longest_match');
+      //
+      // ⚠️ THE REASON CHANGED, AND IT WAS SUPPOSED TO (ADR-0039). It read
+      // `longest_match` when the matcher would pay any price to reach an answer.
+      // The step budget refuses to, so the deciding rule here is now one whose
+      // match was presumed rather than computed. Updated rather than relaxed:
+      // this pins the fail-closed outcome, where the old assertion pinned only
+      // that some rule had won.
+      expect(verdict.reason).toBe('budget_exhausted');
+      expect(verdict.allowed).toBe(false);
 
-      // Observed ~63 ms at the cap against ~16,800 ms at 10,000 characters on
-      // this machine. The threshold asserts the collapse in order of magnitude,
-      // not a machine-specific number.
+      // Observed ~76 ms at the cap before the step budget and ~25 ms after, on
+      // this machine, against ~16,800 ms at 10,000 characters. The threshold
+      // asserts the collapse in order of magnitude, not a machine-specific
+      // number.
       expect(elapsed).toBeLessThan(1_000);
     });
   });

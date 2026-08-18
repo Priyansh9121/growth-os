@@ -21,10 +21,21 @@
  * A robots.txt is attacker-controlled input. `/a*a*a*a*a*a*a*b` compiled to a
  * regex and run against a long path is catastrophic backtracking — a denial of
  * service delivered by a text file. The matcher below is an explicit two-pointer
- * scan with a single backtrack position, which cannot blow up.
+ * scan with a single backtrack position, so it has no exponential case.
+ *
+ * ⚠️ AND NO EXPONENTIAL CASE IS NOT THE SAME AS BOUNDED.
+ * That claim used to end "which cannot blow up". It was too strong. The scan is
+ * `O(pattern × target)`, and one pattern at the URL ceiling was measured at
+ * **1,049,601 steps** — a polynomial denial of service, arrived at from the
+ * opposite direction. Cost is now bounded by an explicit step budget that fails
+ * closed; the two-pointer scan is what makes that budget a small number rather
+ * than an arbitrary one.
  *
  * @see docs/decisions/ADR-0035-robots-and-politeness.md
+ * @see docs/decisions/ADR-0039-robots-matcher-step-budget.md
  */
+
+import { MAX_URL_LENGTH } from '@growth-os/net';
 
 /** The product token Growth OS identifies itself by. One definition. */
 export const USER_AGENT_TOKEN = 'GrowthOSBot';
@@ -58,6 +69,55 @@ export const DEFAULT_ROBOTS_LIMITS: RobotsLimits = {
   maxLines: 100_000,
   maxRules: 2_000,
   maxPatternLength: 2_048,
+};
+
+/**
+ * How much work one permission question may cost.
+ *
+ * ⚠️ THESE ARE A SECURITY CONTROL, NOT A PERFORMANCE TUNING KNOB.
+ * Both inputs to the matcher are chosen by the site being crawled: it serves the
+ * robots.txt, and it links the URLs. Exceeding either budget changes what the
+ * crawler is permitted to fetch — see `isAllowed`.
+ *
+ * @see docs/decisions/ADR-0039-robots-matcher-step-budget.md
+ */
+export interface RobotsStepBudgets {
+  /**
+   * Steps one pattern may consume before its match is *unknown*.
+   *
+   * Measured (ADR-0039): every real-world pattern shape costs under 4,100 steps
+   * against a 2,048-character URL — the longest `normaliseUrl` will admit — and
+   * the median costs 5. The pathological shape at the same ceiling costs
+   * 1,049,601. The line sits at 50,000: **12× above** anything legitimate that
+   * was measured, **21× below** the payload it exists to refuse.
+   */
+  readonly perPattern: number;
+  /**
+   * Steps one `isAllowed` call may consume across every rule in the group.
+   *
+   * ⚠️ WITHOUT THIS, `perPattern` BUYS ALMOST NOTHING. The per-rule budget
+   * bounds one pattern; the cost of the call is `rules × budget`, and `maxRules`
+   * is 2,000. Measured: a per-rule budget alone leaves 20 minutes of blocked
+   * event loop per crawl, which is worse than the residual it was meant to fix.
+   */
+  readonly perEvaluation: number;
+}
+
+/**
+ * ⚠️ `perEvaluation` IS DERIVED, NOT PICKED.
+ *
+ * `maxRules × MAX_URL_LENGTH` is what evaluating a maximally large robots.txt
+ * against a maximum-length URL costs when **no pattern backtracks
+ * pathologically** — the work the algorithm is supposed to do. Everything beyond
+ * it is blowup, which is exactly what is being refused.
+ *
+ * Measured against it: a legitimate 2,000-rule file (the `maxRules` ceiling) at
+ * a 2,048-character URL uses **39.8 %** of the allowance. `MAX_URL_LENGTH` is
+ * imported rather than restated, for the reason ADR-0038 gives.
+ */
+export const DEFAULT_STEP_BUDGETS: RobotsStepBudgets = {
+  perPattern: 50_000,
+  perEvaluation: DEFAULT_ROBOTS_LIMITS.maxRules * MAX_URL_LENGTH,
 };
 
 // ---------------------------------------------------------------------------
@@ -109,7 +169,17 @@ export type RobotsReason =
   | 'longest_match'
   | 'allow_wins_tie'
   | 'empty_disallow'
-  | 'unparseable_url';
+  | 'unparseable_url'
+  /**
+   * ⚠️ The deciding rule cost more than the step budget, so we never learned
+   * whether it matched, and refused rather than guess.
+   *
+   * Its own reason rather than `longest_match` because an operator asking "why
+   * was this page skipped?" would otherwise be told their pattern decided it.
+   * It did not; our budget did. `rule` still quotes the pattern verbatim — the
+   * fact being reported is that *this line* is the one that costs too much.
+   */
+  | 'budget_exhausted';
 
 export interface RobotsVerdict {
   readonly allowed: boolean;
@@ -307,6 +377,7 @@ export function isAllowed(
   rules: RobotsRules,
   normalisedUrl: string,
   userAgent: string = USER_AGENT_TOKEN,
+  budgets: RobotsStepBudgets = DEFAULT_STEP_BUDGETS,
 ): RobotsVerdict {
   let target: string;
   try {
@@ -329,6 +400,17 @@ export function isAllowed(
   let best: RobotsRule | null = null;
   let bestLength = -1;
   let tie = false;
+  /** True when the winning rule's match was presumed rather than computed. */
+  let bestPresumed = false;
+
+  /**
+   * ⚠️ ONE ALLOWANCE FOR THE WHOLE QUESTION, not one per rule.
+   *
+   * A per-rule budget bounds a pattern; it does not bound a *file*, and a file
+   * may hold `maxRules` of them. Sharing the allowance is what makes the answer
+   * to "may we fetch this URL?" cost a bounded amount.
+   */
+  let allowance = budgets.perEvaluation;
 
   for (const rule of group.rules) {
     // ⚠️ `Disallow:` WITH AN EMPTY VALUE MEANS ALLOW EVERYTHING, and is the
@@ -339,8 +421,40 @@ export function isAllowed(
       continue;
     }
 
-    if (!matchesPattern(rule.pattern, target)) continue;
+    const attempt = matchPattern(
+      rule.pattern,
+      target,
+      Math.max(0, Math.min(budgets.perPattern, allowance)),
+    );
+    allowance -= attempt.steps;
 
+    // ⚠️ FAIL CLOSED, AND ASYMMETRICALLY. A budget exhaustion is an ambiguity,
+    // and this file resolves every ambiguity toward not fetching. So:
+    //
+    //   an unevaluable DISALLOW is presumed to have MATCHED — we may not fetch
+    //   an unevaluable ALLOW    is presumed NOT to have matched — it grants
+    //                             nothing, because permission we did not compute
+    //                             is not permission
+    //
+    // Both presumptions push the same way. Dropping an Allow can only ever make
+    // the verdict more restrictive, never less, which is what makes the budget
+    // safe to add to a permission control at all.
+    let presumed = false;
+    if (attempt.outcome === 'budget_exhausted') {
+      if (rule.allow) continue;
+      presumed = true;
+    } else if (attempt.outcome === 'no_match') {
+      continue;
+    }
+
+    // ⚠️ AND PRECEDENCE STILL RUNS. A presumed match competes on length like any
+    // other rather than short-circuiting, because that is *more* conservative,
+    // not less: a genuine Allow that is longer wins under both readings of the
+    // unknown — if the Disallow matched, the longer Allow beats it; if it did
+    // not, the Allow wins anyway. Refusing there would refuse a URL whose
+    // verdict is actually known. The URL is refused exactly when the two
+    // readings disagree.
+    //
     // RFC 9309 §2.2.2: the LONGEST matching pattern wins, regardless of the
     // order rules appear in. On an exact tie, ALLOW wins.
     const length = effectiveLength(rule.pattern);
@@ -348,9 +462,13 @@ export function isAllowed(
       best = rule;
       bestLength = length;
       tie = false;
+      bestPresumed = presumed;
     } else if (length === bestLength && best && rule.allow !== best.allow) {
       tie = true;
-      if (rule.allow) best = rule;
+      if (rule.allow) {
+        best = rule;
+        bestPresumed = presumed;
+      }
     }
   }
 
@@ -370,7 +488,9 @@ export function isAllowed(
   return {
     allowed: best.allow,
     rule: `${best.allow ? 'Allow' : 'Disallow'}: ${best.pattern}`,
-    reason: tie ? 'allow_wins_tie' : 'longest_match',
+    // A presumed match is never an Allow — those are dropped above — so this can
+    // only ever report a refusal we could not compute.
+    reason: bestPresumed ? 'budget_exhausted' : tie ? 'allow_wins_tie' : 'longest_match',
     crawlDelaySeconds: delay,
   };
 }
@@ -386,6 +506,21 @@ function effectiveLength(pattern: string): number {
 }
 
 /**
+ * What one pattern comparison concluded.
+ *
+ * ⚠️ THREE OUTCOMES, NOT A BOOLEAN, and that is the whole point: `no_match` and
+ * `budget_exhausted` are not the same fact. One says the rule does not apply;
+ * the other says we do not know whether it does.
+ */
+export type PatternMatchOutcome = 'match' | 'no_match' | 'budget_exhausted';
+
+export interface PatternMatchResult {
+  readonly outcome: PatternMatchOutcome;
+  /** Steps consumed. The caller subtracts this from a shared allowance. */
+  readonly steps: number;
+}
+
+/**
  * Glob matching with exactly two metacharacters: `*` and a trailing `$`.
  *
  * ⚠️ AN EXPLICIT TWO-POINTER SCAN, NOT A REGULAR EXPRESSION.
@@ -397,11 +532,34 @@ function effectiveLength(pattern: string): number {
  * monotonically, so its cost is bounded by pattern × path with no exponential
  * case.
  *
+ * ⚠️ AND `pattern × path` IS STILL TOO MUCH TO PAY.
+ *
+ * That bound was written down accurately and never multiplied out. At the
+ * 2,048-character URL ceiling it is 4.2 million comparisons, and a pattern of
+ * the shape `/*` + a literal run half the target's length reaches 1,049,601 of
+ * them, because every backtrack re-compares the whole run. `page_limit` permits
+ * 10,000 URLs. So `budget` is a hard ceiling on the work, and running out of it
+ * is a **third answer** rather than a `false` — see `isAllowed`, which is where
+ * not knowing gets resolved.
+ *
+ * ⚠️ THE BUDGET COUNTS LOOP STEPS, NOT BACKTRACKS. Measured (ADR-0039): the
+ * pathological shape takes 49,049 steps and **47** backtracks, while a harmless
+ * 500-star pattern takes 2,548 steps and **1,547**. Backtracks are 33× higher
+ * on the cheap input, because cost is backtracks × the literal run each one
+ * re-compares, and neither factor alone is the bill. Steps track wall clock at a
+ * flat ~6 ns across every shape measured; backtracks do not track it at all.
+ *
  * Everything other than `*` and a trailing `$` is a literal, including `?`,
  * `.` and `[` — which is why regex is wrong twice over: it would also give
  * those characters meanings robots.txt does not give them.
+ *
+ * @see docs/decisions/ADR-0039-robots-matcher-step-budget.md
  */
-export function matchesPattern(pattern: string, target: string): boolean {
+export function matchPattern(
+  pattern: string,
+  target: string,
+  budget: number = DEFAULT_STEP_BUDGETS.perPattern,
+): PatternMatchResult {
   const anchored = pattern.endsWith('$');
 
   // ⚠️ AN UNANCHORED PATTERN IS A PREFIX MATCH: `Disallow: /admin` covers
@@ -414,8 +572,10 @@ export function matchesPattern(pattern: string, target: string): boolean {
   let t = 0;
   let starPattern = -1;
   let starTarget = 0;
+  let steps = 0;
 
   while (t < target.length) {
+    if ((steps += 1) > budget) return { outcome: 'budget_exhausted', steps };
     if (p < glob.length && glob[p] === '*') {
       // Remember where to resume if the rest fails, then try consuming nothing.
       starPattern = p;
@@ -431,12 +591,16 @@ export function matchesPattern(pattern: string, target: string): boolean {
       starTarget += 1;
       t = starTarget;
     } else {
-      return false;
+      return { outcome: 'no_match', steps };
     }
   }
 
-  // Trailing stars may match the empty remainder.
-  while (p < glob.length && glob[p] === '*') p += 1;
+  // Trailing stars may match the empty remainder. Counted too, so the budget is
+  // a bound on the function rather than on most of it.
+  while (p < glob.length && glob[p] === '*') {
+    if ((steps += 1) > budget) return { outcome: 'budget_exhausted', steps };
+    p += 1;
+  }
 
-  return p === glob.length;
+  return { outcome: p === glob.length ? 'match' : 'no_match', steps };
 }
