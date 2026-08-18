@@ -379,15 +379,20 @@ describe('normaliseUrl — the length ceiling', () => {
   });
 
   describe('⚠️ the property that matters: the matcher cannot be reached with a long target', () => {
-    // The exact corpus from dev log 0018 — 255 surviving rules of the shape
-    // that defeats the two-pointer scan: long literal runs either side of one
-    // star, so every star retry re-compares the whole literal.
+    // The exact corpus from dev log 0018 — surviving rules of the shape that
+    // defeats the two-pointer scan: long literal runs either side of one star,
+    // so every star retry re-compares the whole literal.
     const rule = `Disallow: /${'a'.repeat(1_000)}*${'a'.repeat(1_000)}b`;
     const robots = parseRobotsTxt(`User-agent: *\n${`${rule}\n`.repeat(300)}`);
 
     it('parses to the corpus the measurement was taken against', () => {
       expect(robots.truncated).toBe(true);
-      expect(robots.groups[0]?.rules.length).toBe(255);
+      // ⚠️ 254, NOT 255, AND THAT IS THE FIX LANDING (ADR-0040). The 255th
+      // "rule" was never a rule: the 512,000-byte cap cut the last line
+      // mid-pattern and the parser kept the stump. ADR-0038 named it as the
+      // truncation defect awaiting its own brief; this is that brief, and a
+      // partial line is now discarded instead of being turned into a directive.
+      expect(robots.groups[0]?.rules.length).toBe(254);
     });
 
     it('refuses the 10,000-character path that cost over twelve seconds', () => {
@@ -404,15 +409,14 @@ describe('normaliseUrl — the length ceiling', () => {
       const verdict = isAllowed(robots, atCap);
       const elapsed = performance.now() - started;
 
-      // ⚠️ THE VERDICT IS DELIBERATELY NOT ASSERTED. This corpus returns
-      // `allowed: false`, and not because of the 255 hostile rules: the
-      // 512,000-byte parse cap cuts the last rule mid-pattern, leaving a
-      // 420-character `Disallow: /aaa…` with its `*` and its final `b` gone.
-      // Unanchored patterns are prefix matches, so that stump matches. It is
-      // the truncation defect from dev log 0018 — the next brief, not this one.
-      // Asserting a boolean governed by a known separate defect would make this
-      // test fail when that defect is fixed, for a reason unrelated to what it
-      // covers.
+      // ⚠️ THE STUMP IS GONE, AND THE VERDICT SURVIVED IT (ADR-0040). Two ADRs
+      // ago this comment explained that the refusal came from a fabricated
+      // 420-character `Disallow: /aaa…` — the cut rule with its `*` and final
+      // `b` removed — rather than from the 254 hostile rules, and that
+      // asserting the boolean would break when the truncation defect was fixed.
+      // It has now been fixed: the partial line is discarded. The refusal below
+      // therefore comes from the hostile rules themselves, via the step budget,
+      // which is what this test was always trying to cover.
       //
       // ⚠️ THE REASON CHANGED, AND IT WAS SUPPOSED TO (ADR-0039). It read
       // `longest_match` when the matcher would pay any price to reach an answer.

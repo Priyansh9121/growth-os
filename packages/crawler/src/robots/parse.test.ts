@@ -20,6 +20,7 @@ import {
   isAllowed,
   matchPattern,
   parseRobotsTxt,
+  type RobotsRules,
   selectGroup,
   USER_AGENT_TOKEN,
 } from './parse';
@@ -667,4 +668,270 @@ describe('⚠️ isAllowed fails closed when the budget is exhausted', () => {
       expect(isAllowed(rules, url).reason).not.toBe('budget_exhausted');
     }
   });
+});
+
+// ---------------------------------------------------------------------------
+// §6 the three fail-open defects from dev log 0018 — see ADR-0040
+// ---------------------------------------------------------------------------
+
+/** Every rule in a parse, flattened, for subset and fabrication checks. */
+const allRules = (rules: RobotsRules): string[] =>
+  rules.groups.flatMap((g) =>
+    g.rules.map((r) => `${r.allow ? 'Allow' : 'Disallow'}: ${r.pattern}`),
+  );
+
+describe('⚠️ defect 1 — a directive without a colon must not fail open', () => {
+  it('honours `Disallow /admin`, which was silently dropped', () => {
+    // Measured in dev log 0018: this parsed to a group with ZERO rules and
+    // /admin/customers was FETCHED, where Googlebot refuses it.
+    const robots = 'User-agent: *\nDisallow /admin';
+    expect(parseRobotsTxt(robots).groups[0]?.rules).toHaveLength(1);
+    expect(allows(robots, '/admin/customers')).toBe(false);
+  });
+
+  it('⚠️ honours `User-agent *`, which discarded the entire file', () => {
+    // The worst of the three: no group at all, so every rule after it belonged
+    // to nothing and the whole file evaluated as `no_group_matched`.
+    const robots = 'User-agent *\nDisallow /admin';
+    expect(parseRobotsTxt(robots).groups).toHaveLength(1);
+    expect(isAllowed(parseRobotsTxt(robots), url('/admin/customers')).reason).toBe('longest_match');
+    expect(allows(robots, '/admin/customers')).toBe(false);
+  });
+
+  it('accepts a tab as the separator', () => {
+    expect(allows('User-agent\t*\nDisallow\t/admin', '/admin/customers')).toBe(false);
+  });
+
+  it('⚠️ the colon still wins wherever it appears', () => {
+    // `Disallow : /admin` parses today via indexOf(':'). Taking the first
+    // whitespace instead would make the value `: /admin`, matching nothing —
+    // a fail-open introduced by the fail-open fix.
+    expect(allows('User-agent: *\nDisallow : /admin', '/admin/customers')).toBe(false);
+    expect(allows('User-agent : *\nDisallow : /admin', '/admin/customers')).toBe(false);
+  });
+
+  it('⚠️ refuses to guess when a colon-less line has more than two tokens', () => {
+    // Google accepts whitespace as a separator only when the line is exactly
+    // two non-whitespace runs. Without that, prose becomes a directive.
+    const prose = 'User-agent: *\nDisallow the admin area please\nDisallow: /real';
+    const rules = parseRobotsTxt(prose);
+    expect(rules.groups[0]?.rules).toEqual([{ allow: false, pattern: '/real' }]);
+
+    // And a path containing a space is not silently halved into a rule.
+    const spaced = parseRobotsTxt('User-agent: *\nDisallow /path with space');
+    expect(spaced.groups[0]?.rules).toEqual([]);
+  });
+
+  it('does not invent a group from an ordinary sentence', () => {
+    const rules = parseRobotsTxt('this is a comment someone forgot to hash\nUser-agent: *');
+    expect(rules.groups.flatMap((g) => g.agents)).toEqual(['*']);
+  });
+
+  it('⚠️ reading a group we could not see before can PERMIT more, and must', () => {
+    // The counterexample to "this fix only ever refuses more", pinned so nobody
+    // later mistakes it for a regression and reverses it.
+    //
+    // The colon-less line is invisible to the old parser, so `Allow: /admin`
+    // lands in the wildcard group and `Disallow: /` refuses everything. Read
+    // correctly, the site has written a group that names US, and RFC 9309 says
+    // the most specific group applies AND ONLY THAT ONE — so the wildcard's
+    // `Disallow: /` no longer applies to us. That is what the site owner wrote
+    // and what Googlebot does.
+    const robots = 'User-agent: *\nDisallow: /\nUser-agent GrowthOSBot\nAllow: /admin\n';
+
+    expect(parseRobotsTxt(robots).groups.map((g) => g.agents)).toEqual([['*'], ['growthosbot']]);
+    expect(selectGroup(parseRobotsTxt(robots))?.agents).toEqual(['growthosbot']);
+    expect(allows(robots, '/anything')).toBe(true);
+
+    // Another crawler still gets the restrictive wildcard group.
+    expect(allows(robots, '/anything', 'SomeOtherBot')).toBe(false);
+  });
+
+  it('leaves a file that uses colons everywhere completely unchanged', () => {
+    const legitimate = [
+      'User-agent: *',
+      'Disallow: /wp-admin/',
+      'Allow: /wp-admin/admin-ajax.php',
+      'Disallow: /?s=',
+      'Crawl-delay: 5',
+      'Sitemap: https://example.test/sitemap.xml',
+    ].join('\n');
+    const rules = parseRobotsTxt(legitimate);
+
+    expect(rules.groups).toHaveLength(1);
+    expect(rules.groups[0]?.rules).toEqual([
+      { allow: false, pattern: '/wp-admin/' },
+      { allow: true, pattern: '/wp-admin/admin-ajax.php' },
+      { allow: false, pattern: '/?s=' },
+    ]);
+    expect(rules.groups[0]?.crawlDelaySeconds).toBe(5);
+    expect(rules.sitemaps).toEqual(['https://example.test/sitemap.xml']);
+  });
+});
+
+describe('⚠️ defect 2 — truncation must not fabricate a rule', () => {
+  const limits = { ...DEFAULT_ROBOTS_LIMITS, maxBytes: 200 };
+  const tail = 'User-agent: *\nDisallow: /private\nAllow: /private-public-page\n';
+  /** A file whose cut lands exactly inside the final `Allow` value. */
+  const body = `${'#'.repeat(limits.maxBytes - 'User-agent: *\nDisallow: /private\nAllow: /private'.length - 1)}\n${tail}`;
+
+  it('the fixture cuts mid-value, which is the whole defect', () => {
+    expect(body.length).toBeGreaterThan(limits.maxBytes);
+    expect(body.slice(limits.maxBytes - 15, limits.maxBytes)).toBe('Allow: /private');
+  });
+
+  it('⚠️ does not turn `Allow: /private-public-page` into `Allow: /private`', () => {
+    // Measured in dev log 0018: the stump ties `Disallow: /private` on effective
+    // length, Allow wins the tie, and the whole subtree opens.
+    const rules = parseRobotsTxt(body, limits);
+    expect(rules.groups[0]?.rules).toEqual([{ allow: false, pattern: '/private' }]);
+    expect(isAllowed(rules, url('/private')).allowed).toBe(false);
+    expect(isAllowed(rules, url('/private/secret-invoices')).allowed).toBe(false);
+  });
+
+  it('still applies the rules it did read — truncation is not rejection', () => {
+    // ADR-0035 is explicit that a file over the cap is truncated, not discarded.
+    const rules = parseRobotsTxt(body, limits);
+    expect(rules.truncated).toBe(true);
+    expect(rules.groups[0]?.rules).toHaveLength(1);
+  });
+
+  it('⚠️ a 512 KB first line yields no rules, because it is not a complete line', () => {
+    // No line break inside the cap means nothing was read to the end. The
+    // honest output is no rules, not half a directive.
+    const oneLine = `User-agent: *\nDisallow: /${'a'.repeat(500)}`;
+    const rules = parseRobotsTxt(oneLine, { ...DEFAULT_ROBOTS_LIMITS, maxBytes: 10 });
+    expect(rules.truncated).toBe(true);
+    expect(rules.groups).toEqual([]);
+  });
+
+  it('⚠️ PROPERTY: no cut, at any offset, ever invents a rule', () => {
+    // The strong form. For every possible truncation point of several files,
+    // the rules parsed must be a SUBSET of the rules the untruncated file
+    // produces. A fabricated stump is exactly a rule that is not in that set.
+    const files = [
+      'User-agent: *\nDisallow: /private\nAllow: /private-public-page\n',
+      'User-agent: *\nAllow: /private\nDisallow: /private-public-page\n',
+      'User-agent: *\nDisallow: /admin\nUser-agent: GrowthOSBot\nDisallow: /x\n',
+      'User-agent: *\nDisallow: /a\nCrawl-delay: 10\nSitemap: https://e.test/s.xml\n',
+      'User-agent: *\r\nDisallow: /crlf-separated\r\nAllow: /crlf\r\n',
+    ];
+
+    for (const file of files) {
+      const truth = new Set(allRules(parseRobotsTxt(file)));
+      for (let cap = 1; cap <= file.length; cap++) {
+        const cut = parseRobotsTxt(file, { ...DEFAULT_ROBOTS_LIMITS, maxBytes: cap });
+        for (const rule of allRules(cut)) {
+          expect(
+            truth.has(rule),
+            `cap=${cap} invented ${JSON.stringify(rule)} from ${JSON.stringify(file)}`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+});
+
+describe('⚠️ defect 3 — repeated groups for the same agent must be combined', () => {
+  it('⚠️ does not discard the second group naming the same agent', () => {
+    // RFC 9309 §2.2.1. Found while measuring defect 1: this file has a colon on
+    // every line and `Disallow: /admin` was silently dropped, because
+    // selectGroup returned only the FIRST wildcard group.
+    const robots = 'User-agent: *\nAllow: /\nUser-agent: *\nDisallow: /admin\n';
+    expect(parseRobotsTxt(robots).groups).toHaveLength(2);
+    expect(allows(robots, '/admin/customers')).toBe(false);
+  });
+
+  it('⚠️ PROPERTY: the verdict does not depend on which duplicate comes first', () => {
+    // The old parser gives `ALLOWED` for one ordering and `refused` for the
+    // other — a permission boundary whose answer depends on file order.
+    const a = 'User-agent: *\nAllow: /\nUser-agent: *\nDisallow: /admin\n';
+    const b = 'User-agent: *\nDisallow: /admin\nUser-agent: *\nAllow: /\n';
+    for (const path of ['/', '/admin', '/admin/customers']) {
+      expect(allows(a, path), `path ${path}`).toBe(allows(b, path));
+    }
+  });
+
+  it('merges a specific group with its duplicate, and still outranks the wildcard', () => {
+    const robots = [
+      'User-agent: *',
+      'Disallow: /',
+      'User-agent: GrowthOSBot',
+      'Allow: /public',
+      'User-agent: GrowthOSBot',
+      'Disallow: /public/secret',
+    ].join('\n');
+
+    expect(selectGroup(parseRobotsTxt(robots))?.agents).toEqual(['growthosbot']);
+    expect(allows(robots, '/public/page')).toBe(true);
+    expect(allows(robots, '/public/secret/x')).toBe(false);
+    // The wildcard group is still not applied on top of the specific one.
+    expect(allows(robots, '/elsewhere')).toBe(true);
+  });
+
+  it('⚠️ takes the LONGEST crawl-delay when duplicates disagree', () => {
+    // ADR-0035: `Crawl-delay` may only ever slow us down. Two groups naming us
+    // with different delays is an ambiguity, and the polite reading is the
+    // slower one.
+    const robots = 'User-agent: *\nCrawl-delay: 2\nUser-agent: *\nCrawl-delay: 30\n';
+    expect(selectGroup(parseRobotsTxt(robots))?.crawlDelaySeconds).toBe(30);
+
+    const reversed = 'User-agent: *\nCrawl-delay: 30\nUser-agent: *\nCrawl-delay: 2\n';
+    expect(selectGroup(parseRobotsTxt(reversed))?.crawlDelaySeconds).toBe(30);
+  });
+
+  it('leaves a file with no repeated agent exactly as it was', () => {
+    const robots =
+      'User-agent: *\nDisallow: /everyone\n\nUser-agent: growthosbot\nDisallow: /just-us';
+    expect(selectGroup(parseRobotsTxt(robots))?.rules).toEqual([
+      { allow: false, pattern: '/just-us' },
+    ]);
+    expect(allows(robots, '/everyone')).toBe(true);
+    expect(allows(robots, '/just-us')).toBe(false);
+  });
+});
+
+describe('⚠️ the three fixes together, on files that were already correct', () => {
+  // The negative control. Every one of these uses colons, has no repeated
+  // agent and is under the byte cap, so all three fixes must be invisible.
+  const cases: ReadonlyArray<readonly [string, ReadonlyArray<readonly [string, boolean]>]> = [
+    [
+      [
+        'User-agent: *',
+        'Disallow: /wp-admin/',
+        'Allow: /wp-admin/admin-ajax.php',
+        'Disallow: /?s=',
+      ].join('\n'),
+      [
+        ['/wp-admin/options.php', false],
+        ['/wp-admin/admin-ajax.php', true],
+        ['/?s=plumber', false],
+        ['/about', true],
+      ],
+    ],
+    [
+      ['User-agent: AhrefsBot', 'Disallow: /', '', 'User-agent: *', 'Disallow: /cart/'].join('\n'),
+      [
+        ['/cart/items', false],
+        ['/', true],
+      ],
+    ],
+    [['User-agent: *', 'Disallow:'].join('\n'), [['/anything', true]]],
+    [
+      ['User-agent: *', 'Allow: /docs/public', 'Disallow: /docs'].join('\n'),
+      [
+        ['/docs/public/x', true],
+        ['/docs/private', false],
+      ],
+    ],
+  ];
+
+  it.each(cases.map((c, i) => [i, c[0], c[1]] as const))(
+    'case %i is unaffected by all three fixes',
+    (_i, robots, expectations) => {
+      for (const [path, expected] of expectations) {
+        expect(allows(robots, path), `${robots}\n-> ${path}`).toBe(expected);
+      }
+    },
+  );
 });
