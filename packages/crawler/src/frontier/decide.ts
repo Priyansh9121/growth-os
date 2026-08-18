@@ -27,7 +27,7 @@
 
 import type { SkipReason } from '@growth-os/contracts';
 import { isAllowed, type RobotsRules } from '../robots/parse';
-import { normaliseUrl } from '../urls/normalise';
+import { normaliseUrlOutcome } from '../urls/normalise';
 import { classifyScope, type CrawlScope } from '../urls/scope';
 
 /** How a URL came to our attention. Recorded so "why did you crawl that?" has an answer. */
@@ -113,15 +113,22 @@ export function decideEnqueue(input: DecideInput): EnqueueDecision {
   const { candidate, scope, robots, budget, counts } = input;
 
   // 1. IDENTITY. One definition, never inlined (AGENTS.md §5).
-  const normalisedUrl = normaliseUrl(candidate.url, {
+  const identity = normaliseUrlOutcome(candidate.url, {
     ...(candidate.base ? { base: candidate.base } : {}),
   });
 
-  if (normalisedUrl === null) {
-    // `mailto:`, `tel:`, `javascript:`, a bare fragment, or unparseable. Not a
-    // resource — recorded as seen so a link audit can still count it.
-    return refuse(null, 'unsupported_scheme', null, counts, budget);
+  if (identity.url === null) {
+    // ⚠️ TWO REASONS, NOT ONE. Until ADR-0042 both were `unsupported_scheme`,
+    // which said "this is a `mailto:`" about an ordinary page whose only
+    // problem was length. The length ceiling is ours; the scheme is the site's.
+    //
+    // Recorded either way, so a link audit can still count what it saw.
+    const reason: SkipReason =
+      identity.refusal === 'too_long' ? 'url_too_long' : 'unsupported_scheme';
+    return refuse(null, reason, null, counts, budget);
   }
+
+  const normalisedUrl = identity.url;
 
   // 2. SCOPE. A reason, not a boolean, because the three ways of being out of
   //    scope are three different facts about a site.
@@ -149,7 +156,15 @@ export function decideEnqueue(input: DecideInput): EnqueueDecision {
 
   const robotsVerdict = isAllowed(robots, normalisedUrl);
   if (!robotsVerdict.allowed) {
-    return refuse(normalisedUrl, 'robots_disallowed', robotsVerdict.rule, counts, budget);
+    // ⚠️ WHOSE DECISION WAS IT? `robots_disallowed` asserts that a rule the
+    // site owner wrote refused this. When the matcher's step budget ran out we
+    // never computed whether any rule matched — we refused rather than guess
+    // (ADR-0039) — and saying otherwise attributes our limit to their file.
+    // The verdict has carried the distinction since that ADR; the frontier row
+    // could not express it until ADR-0042.
+    const reason: SkipReason =
+      robotsVerdict.reason === 'budget_exhausted' ? 'budget_exhausted' : 'robots_disallowed';
+    return refuse(normalisedUrl, reason, robotsVerdict.rule, counts, budget);
   }
 
   // 5. BUDGET. Only reached by a URL that would actually be fetched, which is

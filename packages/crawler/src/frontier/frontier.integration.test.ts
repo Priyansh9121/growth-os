@@ -32,11 +32,30 @@ import {
   seedFrontier,
   type EnqueueEnvironment,
 } from './frontier';
+import { SKIP_REASONS } from '@growth-os/contracts';
 import { frontierRowCeiling, type Candidate } from './decide';
 import { ALLOW_ALL, parseRobotsTxt } from '../robots/parse';
 import { crawlScope } from '../urls/scope';
 
 const describeIntegration = hasTestDatabase() ? describe : describe.skip;
+
+/**
+ * The SQLSTATE and constraint a rejected write cited.
+ *
+ * ⚠️ "IT THREW" IS THE WEAK PROPERTY. Drizzle wraps the driver error, so the
+ * constraint name is not in `message` — asserting on that would pass for a
+ * typo, a missing column or a null violation. The driver error hangs off
+ * `cause`, and 23514 is `check_violation`.
+ */
+async function refusalOf(write: Promise<unknown>): Promise<{ code: string; constraint: string }> {
+  try {
+    await write;
+  } catch (error) {
+    const cause = (error as { cause?: Record<string, unknown> }).cause ?? {};
+    return { code: String(cause['code']), constraint: String(cause['constraint_name']) };
+  }
+  throw new Error('the database ACCEPTED a row it should have refused');
+}
 
 const { crawlFrontier, crawlPages, crawls, sitePages, sites, workspaces } = schemaTables;
 
@@ -775,6 +794,124 @@ describeIntegration('the crawl frontier', () => {
       expect(fetched.length).toBeLessThanOrEqual(4);
       const progress = await inTenant((tx) => crawlProgress(tx, limited!.id, false));
       expect(progress.reason).toBe('budget_exhausted');
+    });
+  });
+  // -------------------------------------------------------------------------
+  // §5 limits live in the database — see ADR-0042
+  // -------------------------------------------------------------------------
+
+  describe("⚠️ the URL bound is the database's, not the application's", () => {
+    /** Insert straight past every application check, as the owner. */
+    const insertRaw = (normalisedUrl: string) =>
+      harness.owner.insert(crawlFrontier).values({
+        workspaceId,
+        crawlId,
+        normalisedUrl,
+        depth: 0,
+        discoverySource: 'seed',
+        state: 'discovered',
+      });
+
+    it('⚠️ REFUSES a URL over the ceiling', async () => {
+      // The test for a constraint is a row that must be refused (§5). Until
+      // ADR-0042 `crawl_frontier.normalised_url` was a bare `text NOT NULL`
+      // while `crawl_pages` and `site_pages` both carried this CHECK — and
+      // `enqueueDiscovered` writes to `crawl_frontier`, so the one table on the
+      // write path was the one with no backstop.
+      const tooLong = `https://example.test/${'a'.repeat(2048)}`;
+      expect(tooLong.length).toBeGreaterThan(2048);
+
+      expect(await refusalOf(insertRaw(tooLong))).toEqual({
+        code: '23514',
+        constraint: 'crawl_frontier_url_is_bounded',
+      });
+    });
+
+    it('⚠️ REFUSES an empty URL', async () => {
+      expect(await refusalOf(insertRaw(''))).toEqual({
+        code: '23514',
+        constraint: 'crawl_frontier_url_is_bounded',
+      });
+    });
+
+    it('accepts a URL exactly at the ceiling', async () => {
+      // The boundary is inclusive, and matches the other two tables exactly.
+      const atCap = `https://example.test/${'a'.repeat(2048 - 'https://example.test/'.length)}`;
+      expect(atCap.length).toBe(2048);
+
+      await expect(insertRaw(atCap)).resolves.toBeDefined();
+    });
+
+    it('⚠️ all three tables carry the SAME bound', async () => {
+      // Three copies of one number is how they stop agreeing. Asserted from
+      // the catalogue rather than from the migration text.
+      const rows = await harness.owner.execute(sql`
+        SELECT conrelid::regclass::text AS tbl, pg_get_constraintdef(oid) AS def
+        FROM pg_constraint
+        WHERE contype = 'c'
+          AND conrelid::regclass::text IN ('crawl_frontier', 'crawl_pages', 'site_pages')
+          AND pg_get_constraintdef(oid) LIKE '%normalised_url%'
+      `);
+
+      const defs = [...rows].map((r) => String((r as { def: string }).def));
+      expect(defs).toHaveLength(3);
+      for (const def of defs) {
+        expect(def).toContain("normalised_url <> ''::text");
+        expect(def).toContain('length(normalised_url) <= 2048');
+      }
+    });
+  });
+
+  describe('⚠️ the two skip reasons the enum could not express', () => {
+    it('stores url_too_long and budget_exhausted', async () => {
+      // A migration that adds an enum value nothing can store is a schema
+      // change pretending to be a fix.
+      for (const reason of ['url_too_long', 'budget_exhausted'] as const) {
+        const [row] = await harness.owner
+          .insert(crawlFrontier)
+          .values({
+            workspaceId,
+            crawlId,
+            normalisedUrl: `https://example.test/${reason}`,
+            depth: 0,
+            discoverySource: 'link',
+            state: 'skipped',
+            skipReason: reason,
+          })
+          .returning();
+
+        expect(row?.skipReason).toBe(reason);
+      }
+    });
+
+    it('⚠️ every reason the contract declares is one the enum holds', async () => {
+      // The contract and the database enum are two lists that must agree, and
+      // a reason decide.ts can emit but the column cannot hold is an insert
+      // that fails at crawl time on a path no unit test reaches.
+      const rows = await harness.owner.execute(sql`
+        SELECT unnest(enum_range(NULL::crawl_skip_reason))::text AS value
+      `);
+      const inDatabase = new Set([...rows].map((r) => String((r as { value: string }).value)));
+
+      for (const reason of SKIP_REASONS) {
+        expect(inDatabase, `${reason} is missing from crawl_skip_reason`).toContain(reason);
+      }
+      expect(inDatabase.size).toBe(SKIP_REASONS.length);
+    });
+
+    it('⚠️ REFUSES a skip reason the enum does not know', async () => {
+      // 22P02 is invalid_text_representation: the value is not a member of the
+      // enum, so it is refused at the type, before any constraint runs.
+      const refusal = await refusalOf(
+        harness.owner.execute(sql`
+          INSERT INTO crawl_frontier
+            (workspace_id, crawl_id, normalised_url, depth, discovery_source, state, skip_reason)
+          VALUES
+            (${workspaceId}::uuid, ${crawlId}::uuid, 'https://example.test/x', 0, 'link',
+             'skipped', 'not_a_real_reason')
+        `),
+      );
+      expect(refusal.code).toBe('22P02');
     });
   });
 });

@@ -107,22 +107,23 @@ ADRs, docs, code.
 
 ### Stage 3 — lead capture and attribution ingestion
 
-| ADR                                                  | Title                                                       | Status   |
-| ---------------------------------------------------- | ----------------------------------------------------------- | -------- |
-| [0025](ADR-0025-system-actors.md)                    | System actors: capability grants without a user             | Accepted |
-| [0026](ADR-0026-public-form-resolution.md)           | Resolving a public form to a tenant                         | Accepted |
-| [0027](ADR-0027-embed-mechanism.md)                  | Embed forms in an iframe, loaded by a tiny script           | Accepted |
-| [0028](ADR-0028-attribution-storage.md)              | Browser attribution storage: sessionStorage only            | Accepted |
-| [0029](ADR-0029-web-properties.md)                   | `sites`: one shared web-property model                      | Accepted |
-| [0030](ADR-0030-worker-and-queue.md)                 | A PostgreSQL-backed worker, and no Redis yet                | Accepted |
-| [0031](ADR-0031-site-verification.md)                | Crawling requires proof of ownership                        | Accepted |
-| [0032](ADR-0032-crawler-network-security.md)         | One outbound HTTP client, SSRF defended structurally        | Accepted |
-| [0033](ADR-0033-url-normalisation.md)                | One definition of "the same page"                           | Accepted |
-| [0034](ADR-0034-crawl-storage-model.md)              | Page identity is separate from page facts                   | Accepted |
-| [0035](ADR-0035-robots-and-politeness.md)            | Fail closed on unreadable robots.txt, and politeness        | Accepted |
-| [0036](ADR-0036-frontier-budget-and-ceiling.md)      | page_limit counts pages fetched, and the frontier ceiling   | Accepted |
-| [0037](ADR-0037-structural-verification-matching.md) | Verification matches a parsed document, not a pattern       | Accepted |
-| [0038](ADR-0038-url-length-ceiling.md)               | A URL over the admission ceiling has no crawl identity      | Accepted |
-| [0039](ADR-0039-robots-matcher-step-budget.md)       | A robots pattern too costly to evaluate is presumed matched | Accepted |
-| [0040](ADR-0040-robots-fail-open-defects.md)         | Three ways the robots parser failed open                    | Accepted |
-| [0041](ADR-0041-query-identity-preserves-bytes.md)   | A query value is octets; normalising it must not decode     | Accepted |
+| ADR                                                         | Title                                                        | Status   |
+| ----------------------------------------------------------- | ------------------------------------------------------------ | -------- |
+| [0025](ADR-0025-system-actors.md)                           | System actors: capability grants without a user              | Accepted |
+| [0026](ADR-0026-public-form-resolution.md)                  | Resolving a public form to a tenant                          | Accepted |
+| [0027](ADR-0027-embed-mechanism.md)                         | Embed forms in an iframe, loaded by a tiny script            | Accepted |
+| [0028](ADR-0028-attribution-storage.md)                     | Browser attribution storage: sessionStorage only             | Accepted |
+| [0029](ADR-0029-web-properties.md)                          | `sites`: one shared web-property model                       | Accepted |
+| [0030](ADR-0030-worker-and-queue.md)                        | A PostgreSQL-backed worker, and no Redis yet                 | Accepted |
+| [0031](ADR-0031-site-verification.md)                       | Crawling requires proof of ownership                         | Accepted |
+| [0032](ADR-0032-crawler-network-security.md)                | One outbound HTTP client, SSRF defended structurally         | Accepted |
+| [0033](ADR-0033-url-normalisation.md)                       | One definition of "the same page"                            | Accepted |
+| [0034](ADR-0034-crawl-storage-model.md)                     | Page identity is separate from page facts                    | Accepted |
+| [0035](ADR-0035-robots-and-politeness.md)                   | Fail closed on unreadable robots.txt, and politeness         | Accepted |
+| [0036](ADR-0036-frontier-budget-and-ceiling.md)             | page_limit counts pages fetched, and the frontier ceiling    | Accepted |
+| [0037](ADR-0037-structural-verification-matching.md)        | Verification matches a parsed document, not a pattern        | Accepted |
+| [0038](ADR-0038-url-length-ceiling.md)                      | A URL over the admission ceiling has no crawl identity       | Accepted |
+| [0039](ADR-0039-robots-matcher-step-budget.md)              | A robots pattern too costly to evaluate is presumed matched  | Accepted |
+| [0040](ADR-0040-robots-fail-open-defects.md)                | Three ways the robots parser failed open                     | Accepted |
+| [0041](ADR-0041-query-identity-preserves-bytes.md)          | A query value is octets; normalising it must not decode      | Accepted |
+| [0042](ADR-0042-frontier-bound-and-precise-skip-reasons.md) | The frontier URL bound, and two skip reasons the enum lacked | Accepted |

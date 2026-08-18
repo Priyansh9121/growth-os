@@ -52,3 +52,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0020](0020-the-step-budget.md)                          | The step budget, and three numbers the brief had wrong   | 2026-08-18 |
 | [0021](0021-the-fail-open-defects.md)                    | The fail-open defects, and a third found while measuring | 2026-08-18 |
 | [0022](0022-the-query-identity-collision.md)             | The query identity collision, and the last §5 violation  | 2026-08-18 |
+| [0023](0023-one-migration-three-findings.md)             | One migration, three findings, and the first live §7.2   | 2026-08-18 |
