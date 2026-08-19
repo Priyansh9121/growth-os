@@ -275,8 +275,31 @@ async function checkHtmlMeta(
 ): Promise<VerificationResult> {
   const outcome = await safeFetch(deps.network, `${origin}/`, {
     acceptContentTypes: ['text/html', 'application/xhtml+xml'],
-    // A homepage that needs more than this is not one we can verify against.
-    limits: { maxCompressedBytes: 1024 * 1024, maxRedirects: 3 },
+    // ⚠️ BOTH TIERS ARE STATED, AND THAT IS THE POINT. This used to name only
+    // `maxCompressedBytes`, so `maxDecompressedBytes` merged in from
+    // `DEFAULT_LIMITS` at 8 MB — and ADR-0037's timing argument was written
+    // against "the caller accepts 1 MB bodies", which was never true after
+    // decompression.
+    //
+    // Overriding one tier and inheriting the other does not just change a
+    // number, it changes the RATIO between them: the default pair is 2 MB to
+    // 8 MB, so tightening the wire cap to 1 MB while inheriting 8 MB left this
+    // call site permitting 8x expansion where the default permits 4x — looser
+    // than the default, at the call site that deliberately asked to be tighter.
+    // 8 MB of ordinary markup gzips to 24 KB, so that ratio is what an origin
+    // actually spends to fill the parser.
+    //
+    // ⚠️ Not a timing fix. Re-measured: the parse is linear and costs ~96 ms at
+    // 8 MB against the ~20,000 ms the old regex cost at 1.12 MB, so ADR-0037's
+    // argument survives the real ceiling with room to spare. This is about the
+    // call site stating what it accepts instead of half-stating it.
+    //
+    // @see docs/decisions/ADR-0048-verification-body-ceiling.md
+    limits: {
+      maxCompressedBytes: 1024 * 1024,
+      maxDecompressedBytes: 4 * 1024 * 1024,
+      maxRedirects: 3,
+    },
     headers: { 'user-agent': VERIFICATION_USER_AGENT },
   });
 
