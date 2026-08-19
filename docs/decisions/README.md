@@ -157,3 +157,4 @@ ADRs, docs, code.
 | [0042](ADR-0042-frontier-bound-and-precise-skip-reasons.md) | The frontier URL bound, and two skip reasons the enum lacked | Accepted |
 | [0043](ADR-0043-aspsessionid-prefix-match.md)               | One session parameter is matched by prefix, and only one     | Accepted |
 | [0044](ADR-0044-one-landing-path-normaliser.md)             | One definition of the landing path for a URL                 | Accepted |
+| [0045](ADR-0045-one-absolute-url-test.md)                   | One definition of "is this an http(s) location?"             | Accepted |
