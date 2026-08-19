@@ -164,3 +164,4 @@ ADRs, docs, code.
 | [0049](ADR-0049-limits-override-couples-the-body-tiers.md)  | A limits override supplies both body tiers or neither        | Accepted |
 | [0050](ADR-0050-sitemap-parsing.md)                         | Sitemap parsing: htmlparser2, and why truncation is safe     | Accepted |
 | [0051](ADR-0051-sitemap-fetch-is-fail-open.md)              | A sitemap that cannot be read fails OPEN, unlike robots.txt  | Accepted |
+| [0052](ADR-0052-sitemap-walk-bounds.md)                     | Walking a sitemap tree: three bounds, one admission path     | Accepted |
