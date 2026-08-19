@@ -19,6 +19,7 @@ export * from './robots/parse';
 export * from './robots/fetch';
 export * from './sitemap/parse';
 export * from './sitemap/fetch';
+export * from './pages/fetch';
 export * from './sitemap/walk';
 export * from './sitemap/enqueue';
 export * from './urls/normalise';
