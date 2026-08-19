@@ -58,3 +58,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0026](0026-one-absolute-url-test.md)                    | One absolute-URL test, and a fifth copy nobody counted      | 2026-08-19 |
 | [0027](0027-the-field-target-cap.md)                     | The field target cap, and a length check that gates nothing | 2026-08-19 |
 | [0028](0028-one-like-escaper.md)                         | One LIKE escaper, and a near-miss correcting 0018           | 2026-08-19 |
+| [0029](0029-the-body-ceiling-and-a-backlog-pass.md)      | The body ceiling, and 0018's backlog closed out             | 2026-08-19 |
