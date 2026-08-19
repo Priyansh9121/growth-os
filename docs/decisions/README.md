@@ -162,3 +162,4 @@ ADRs, docs, code.
 | [0047](ADR-0047-one-like-escaper.md)                        | One LIKE escaper, and the escape character is escaped first  | Accepted |
 | [0048](ADR-0048-verification-body-ceiling.md)               | Verification states both body tiers, at the default ratio    | Accepted |
 | [0049](ADR-0049-limits-override-couples-the-body-tiers.md)  | A limits override supplies both body tiers or neither        | Accepted |
+| [0050](ADR-0050-sitemap-parsing.md)                         | Sitemap parsing: htmlparser2, and why truncation is safe     | Accepted |
