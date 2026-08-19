@@ -463,6 +463,92 @@ describe('checkProof', () => {
     });
   });
 
+  describe('⚠️ the body ceiling, at both tiers', () => {
+    /**
+     * ⚠️ EVERY PAGE BELOW CARRIES A VALID TAG.
+     *
+     * That is what makes these assertions strong rather than weak. If the
+     * decompressed cap fails to fire, the parser reaches the tag and
+     * verification SUCCEEDS — so `verified: false` proves the limit stopped the
+     * body, not merely that some error came back.
+     *
+     * `checkHtmlMeta` used to name only `maxCompressedBytes`, so
+     * `maxDecompressedBytes` merged in from `DEFAULT_LIMITS` at 8 MB while
+     * ADR-0037 reasoned in print that "the caller accepts 1 MB bodies".
+     */
+    const gzippedPage = async (padBytes: number): Promise<Buffer> => {
+      const { gzipSync } = await import('node:zlib');
+      const filler = '<div class="row"><p>Some ordinary page copy here.</p></div>\n';
+      const padding = filler.repeat(Math.ceil(padBytes / filler.length));
+      return gzipSync(Buffer.from(`<html><head>${tag()}</head><body>${padding}</body></html>`));
+    };
+
+    const servingGzip = (body: Buffer): VerificationDependencies => ({
+      network: {
+        resolver: new FixtureResolver({ 'abcplumbing.test': [PUBLIC_IP] }),
+        transport: new FixtureTransport({
+          [`${ORIGIN}/`]: {
+            status: 200,
+            headers: { 'content-type': 'text/html', 'content-encoding': 'gzip' },
+            body,
+          },
+        }),
+      },
+      txt: noTxt,
+    });
+
+    it('verifies an honest gzipped homepage', async () => {
+      // The control. Without it, every assertion below could pass because
+      // gzip support is broken rather than because a cap fired.
+      const body = await gzippedPage(64 * 1024);
+      expect(await checkProof(servingGzip(body), ORIGIN, T)).toEqual({
+        verified: true,
+        method: 'html_meta',
+      });
+    });
+
+    it('⚠️ refuses a body that decompresses past the ceiling, though the tag is present', async () => {
+      // 8 MB of ordinary markup gzips to roughly 24 KB, so the compressed
+      // stream is nowhere near its own 1 MB cap — that is the trap the second
+      // tier exists for, and the reason a single limit is not a limit.
+      const body = await gzippedPage(8 * 1024 * 1024);
+
+      expect(body.byteLength).toBeLessThan(1024 * 1024);
+      expect(await checkProof(servingGzip(body), ORIGIN, T)).toEqual({
+        verified: false,
+        failure: 'unreachable',
+      });
+    });
+
+    it('⚠️ the enforced ceiling is 4 MB decompressed, not the 8 MB it used to inherit', async () => {
+      // Pins the actual number rather than "something over-large is refused".
+      // Before this change the 6 MB page verified, because the inherited
+      // ceiling was 8 MB. It is the assertion that fails if the explicit
+      // `maxDecompressedBytes` is ever dropped again.
+      const under = await gzippedPage(3 * 1024 * 1024);
+      const over = await gzippedPage(6 * 1024 * 1024);
+
+      expect(await checkProof(servingGzip(under), ORIGIN, T)).toEqual({
+        verified: true,
+        method: 'html_meta',
+      });
+      expect(await checkProof(servingGzip(over), ORIGIN, T)).toEqual({
+        verified: false,
+        failure: 'unreachable',
+      });
+    });
+
+    it('still refuses an uncompressed body over the wire cap', async () => {
+      // The first tier, unchanged by this work and asserted so that stating
+      // both cannot quietly relax either.
+      const huge = `<html><head>${tag()}</head><body>${'x'.repeat(2 * 1024 * 1024)}</body></html>`;
+      expect(await checkProof(serving(huge), ORIGIN, T)).toEqual({
+        verified: false,
+        failure: 'unreachable',
+      });
+    });
+  });
+
   describe('⚠️ the SSRF path — refused, and no socket opened (§6)', () => {
     it('refuses an origin resolving to a private address, without dialling', async () => {
       // ForbiddenTransport THROWS if called, so this proves no connection was
