@@ -194,6 +194,17 @@ export type TagTone = (typeof TAG_TONES)[number];
 export const CUSTOM_FIELD_TYPES = ['text', 'number', 'boolean', 'date', 'single_select'] as const;
 export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
 
+/**
+ * Longest permitted custom field key.
+ *
+ * Exported rather than written twice: a form field's `custom:<key>` target must
+ * be able to name any valid key and nothing longer, so the form schema's bound
+ * is derived from this one. Two literals would let the two drift, and a target
+ * that cannot express a key a workspace has actually created is a mapping the
+ * operator cannot make.
+ */
+export const CUSTOM_FIELD_KEY_MAX_LENGTH = 48;
+
 export const CUSTOM_FIELD_TYPE_LABELS: Readonly<Record<CustomFieldType, string>> = {
   text: 'Text',
   number: 'Number',
