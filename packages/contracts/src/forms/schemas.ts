@@ -19,6 +19,7 @@
  */
 
 import { z } from 'zod';
+import { CUSTOM_FIELD_KEY_MAX_LENGTH } from '../crm/enums';
 import {
   CUSTOM_FIELD_TARGET_PREFIX,
   FORM_FIELD_TARGETS,
@@ -48,17 +49,41 @@ const fieldKey = z
   .regex(/^[a-z][a-z0-9_]*$/, 'Use lowercase letters, numbers and underscores.');
 
 /**
+ * Longest `custom:<key>` target: the prefix plus the longest key the CRM will
+ * accept. Derived from `CUSTOM_FIELD_KEY_MAX_LENGTH` rather than written as a
+ * number, so a target can always name any key a workspace has created.
+ */
+const MAX_FIELD_TARGET_LENGTH = CUSTOM_FIELD_TARGET_PREFIX.length + CUSTOM_FIELD_KEY_MAX_LENGTH;
+
+/**
  * A CRM mapping target: one of the closed set, or `custom:<key>`.
  *
  * Never a column name. Validated as a union so an unknown target fails at the
  * boundary rather than being silently ignored during submission.
+ *
+ * ⚠️ THE QUANTIFIER IS BOUNDED, AND `.max()` ALONE WOULD NOT BE ENOUGH.
+ * Measured on zod 4.4.3 (dev log 0027): zod v4 runs every check and collects
+ * all issues, so `.max()` bounds what is ACCEPTED and never what is EXAMINED —
+ * a `.regex()` beside it still runs against the full input. With `*` the
+ * pattern cost was linear in the input: 2.33 ms against 4 MB. With `{0,47}` it
+ * is anchored and finitely bounded, so the engine tries one start offset,
+ * consumes at most 55 characters and gives up — a flat 0.00013 ms from 1 KB to
+ * 4 MB, independent of input length rather than merely cheap.
+ *
+ * `.max()` is kept as well: it states the bound where a reader looks for it and
+ * produces `too_big` rather than a pattern-mismatch message.
+ *
+ * @see docs/decisions/ADR-0046-field-target-bound.md
  */
 const fieldTarget = z.union([
   z.enum(FORM_FIELD_TARGETS),
   z
     .string()
+    .max(MAX_FIELD_TARGET_LENGTH)
     .regex(
-      new RegExp(`^${CUSTOM_FIELD_TARGET_PREFIX}[a-z][a-z0-9_]*$`),
+      new RegExp(
+        `^${CUSTOM_FIELD_TARGET_PREFIX}[a-z][a-z0-9_]{0,${CUSTOM_FIELD_KEY_MAX_LENGTH - 1}}$`,
+      ),
       'A custom field target looks like custom:property_type.',
     ),
 ]);
