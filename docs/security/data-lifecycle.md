@@ -87,13 +87,33 @@ The file is parsed **in memory** and never written to disk
 directory to leak, scan, or forget to clean up, and no path for a customer CSV
 to be committed by accident.
 
-| Risk                       | Control                                                                 |
-| -------------------------- | ----------------------------------------------------------------------- |
-| Oversized upload           | 5 MB / 10,000 rows, checked at `Content-Length`, `File.size` and decode |
-| Formula injection (export) | `neutraliseCsvFormula` prefixes `= + - @ TAB CR`                        |
-| Malformed encoding         | `TextDecoder(fatal: true)` — rejects rather than mangling               |
-| Arbitrary column targets   | Mapping resolves through the closed `IMPORT_FIELD_TARGETS` enum         |
-| Row values in logs         | Issue messages carry field names and rules, never values                |
+| Risk                     | Control                                                                 |
+| ------------------------ | ----------------------------------------------------------------------- |
+| Oversized upload         | 5 MB / 10,000 rows, checked at `Content-Length`, `File.size` and decode |
+| Malformed encoding       | `TextDecoder(fatal: true)` — rejects rather than mangling               |
+| Arbitrary column targets | Mapping resolves through the closed `IMPORT_FIELD_TARGETS` enum         |
+| Row values in logs       | Issue messages carry field names and rules, never values                |
+
+⚠️ **Formula injection on export is NOT controlled, because there is no export.**
+
+This table listed `neutraliseCsvFormula` as the live control for it. That was
+wrong in the direction that matters: the function exists and is tested, and it
+**has no production caller** — verified in
+[dev log 0024](../development-log/0024-three-claims-the-code-does-not-keep.md),
+where the only references are its definition and its own test file.
+`packages/crm/src/import/csv.ts` reads a file and never writes one.
+
+There is nothing to control today, because nothing exports. **The row is removed
+rather than softened**: a Risk/Control table is read as an inventory of what is
+in force, and an entry naming a function that never runs is how the next author
+concludes the problem is already solved.
+
+When an export is built it must call `neutraliseCsvFormula` — it will not apply
+itself — and this row goes back. Note also that the guard is anchored at index
+0: measured, a leading space, BOM, NBSP or LF leaves a dangerous value
+unprefixed. Whether a spreadsheet still evaluates the formula after those
+characters **has not been measured by this project** and must not be assumed in
+either direction.
 
 Imported provenance is always `source_type = import`, `confidence = manual`. A
 "Source" column becomes `channel_detail` — a spreadsheet saying "Google" is

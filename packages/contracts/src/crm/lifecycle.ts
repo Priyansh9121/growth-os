@@ -509,6 +509,20 @@ void IMPORT_BATCH_STATUSES;
 /**
  * Guard against CSV formula injection on EXPORT.
  *
+ * ⚠️ NOT WIRED. THERE IS NO CSV EXPORT IN THIS REPOSITORY, AND THIS FUNCTION
+ * HAS NO PRODUCTION CALLER.
+ *
+ * Verified in dev log 0024: the only references are this definition and
+ * `packages/crm/src/import/csv.test.ts`. `packages/crm/src/import/csv.ts` reads
+ * a file and never writes one; the sole `text/csv` match in the app is an
+ * `accept=` attribute on the import file picker.
+ *
+ * It is kept rather than deleted because the mitigation is correct and tested,
+ * and an export is a stated product direction — but **the next author to build
+ * that export must call this; it will not apply itself.** The docstring
+ * previously claimed it lived here "rather than in the export route", which
+ * described a route that has never existed.
+ *
  * A cell beginning `=`, `+`, `-`, `@`, TAB or CR is executed as a formula by
  * Excel, Google Sheets and LibreOffice when the file is opened. `=cmd|'/c
  * calc'!A1` is a spreadsheet exploit, not a name.
@@ -516,8 +530,14 @@ void IMPORT_BATCH_STATUSES;
  * Prefixing with an apostrophe is the standard mitigation: the spreadsheet
  * treats the cell as literal text and the apostrophe itself is not displayed.
  *
- * Lives here rather than in the export route so import and export cannot
- * disagree about what is dangerous.
+ * ⚠️ THE TEST IS ANCHORED AT INDEX 0, so a value whose FIRST character is
+ * something else is returned unchanged even when a dangerous character follows.
+ * Measured: a leading space, BOM, NBSP or LF all leave `=cmd|…` unprefixed.
+ * Whether a spreadsheet still evaluates the formula after those characters is
+ * **not something this project has measured** — there is no spreadsheet in the
+ * test environment — so it is recorded as an open question, not as a
+ * vulnerability and not as a non-issue. `neutraliseCsvFormula.test` pins the
+ * behaviour either way.
  */
 export function neutraliseCsvFormula(value: string): string {
   return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;

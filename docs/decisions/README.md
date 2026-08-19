@@ -127,3 +127,4 @@ ADRs, docs, code.
 | [0040](ADR-0040-robots-fail-open-defects.md)                | Three ways the robots parser failed open                     | Accepted |
 | [0041](ADR-0041-query-identity-preserves-bytes.md)          | A query value is octets; normalising it must not decode      | Accepted |
 | [0042](ADR-0042-frontier-bound-and-precise-skip-reasons.md) | The frontier URL bound, and two skip reasons the enum lacked | Accepted |
+| [0043](ADR-0043-aspsessionid-prefix-match.md)               | One session parameter is matched by prefix, and only one     | Accepted |

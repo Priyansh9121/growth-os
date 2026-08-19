@@ -3,6 +3,18 @@
 **Status:** Accepted
 **Date:** 2026-08-15
 
+> ⚠️ **Correction, 2026-08-19 — one factual claim below is false.**
+> This record states that "the export path applies the same prefixing" and lists
+> formula injection on export as a control. **There is no export path**, and
+> `neutraliseCsvFormula` has no production caller — verified in
+> [dev log 0024](../development-log/0024-three-claims-the-code-does-not-keep.md).
+>
+> The decision this ADR records is unchanged and still stands; only that claim
+> about what is implemented is wrong. The body is left exactly as written,
+> because ADRs are immutable once Accepted (`README.md` rule 2) and the history
+> of the reasoning is the point. This note is the minimum that stops the next
+> reader believing a control is in force when it is not.
+
 ## Context
 
 Import is the first bulk write path into the CRM and the first exercise of the
