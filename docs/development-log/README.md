@@ -62,3 +62,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0030](0030-the-limits-merge-and-two-closed-items.md)    | The limits merge, and two items closed not carried          | 2026-08-19 |
 | [0031](0031-the-last-three-and-the-backlog-is-empty.md)  | The last three, and the cleanup backlog is empty            | 2026-08-19 |
 | [0032](0032-the-sitemap-parser.md)                       | The sitemap parser, and a comment that shipped too early    | 2026-08-19 |
+| [0033](0033-sitemap-discovery-reaches-the-frontier.md)   | Sitemap discovery reaches the frontier                      | 2026-08-19 |
