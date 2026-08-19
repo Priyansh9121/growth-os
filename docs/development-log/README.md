@@ -55,3 +55,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0023](0023-one-migration-three-findings.md)             | One migration, three findings, and the first live §7.2   | 2026-08-18 |
 | [0024](0024-three-claims-the-code-does-not-keep.md)      | Three claims the code does not keep, and a fourth found  | 2026-08-19 |
 | [0025](0025-one-landing-path-normaliser.md)              | One landing-path normaliser, and a table seven short     | 2026-08-19 |
+| [0026](0026-one-absolute-url-test.md)                    | One absolute-URL test, and a fifth copy nobody counted   | 2026-08-19 |

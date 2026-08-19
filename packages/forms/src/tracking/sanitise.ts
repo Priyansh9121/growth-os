@@ -28,7 +28,7 @@
  * @see docs/security/attribution-privacy.md
  */
 
-import { landingPathOf, type SubmissionContext } from '@growth-os/contracts';
+import { httpUrlOf, landingPathOf, type SubmissionContext } from '@growth-os/contracts';
 
 const MAX_PATH = 512;
 const MAX_PARAM = 255;
@@ -88,14 +88,10 @@ export function toOrigin(value: string | undefined): string | undefined {
   const trimmed = value.trim();
   if (trimmed.length === 0 || trimmed === 'null') return undefined;
 
-  try {
-    const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-    const url = new URL(withScheme);
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined;
-    return url.origin.slice(0, MAX_PARAM);
-  } catch {
-    return undefined;
-  }
+  const url = httpUrlOf(trimmed);
+  if (url === null) return undefined;
+
+  return url.origin.slice(0, MAX_PARAM);
 }
 
 /** Trim a campaign parameter to a bounded, single-line value. */

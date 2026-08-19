@@ -15,6 +15,8 @@ import {
   splitLandingUrl,
   type FormFieldConfig,
 } from '@growth-os/contracts';
+import { referrerHost } from '@growth-os/contracts';
+import { normaliseWebsiteHost } from '@growth-os/crm';
 import { isFirstPartyOrigin, isOriginAllowed, normaliseOrigin } from '@growth-os/sites';
 import { evaluateAbuseSignals } from './abuse';
 import { honeypotKeyFor } from './honeypot';
@@ -448,5 +450,102 @@ describe('attribution sanitisation', () => {
       expect(sanitiseContext({ elapsedMs: -5 }).elapsedMs).toBe(0);
       expect(sanitiseContext({ elapsedMs: 1e15 }).elapsedMs).toBe(86_400_000);
     });
+  });
+});
+
+/**
+ * ⚠️ THE PROPERTY THAT STOPS THE FOUR DRIFTING APART AGAIN.
+ *
+ * Four functions in three packages answered "is this an http(s) location?"
+ * with the same prepend-and-parse idiom, and dev log 0018 measured three
+ * different answers for one input. They share `httpUrlOf` now (ADR-0045), so
+ * the agreement below is structural rather than a coincidence review must
+ * re-check — but only a test makes reintroducing a local copy fail loudly.
+ *
+ * Asserted here, not beside any one of them, because this is the only package
+ * that depends on all three others. `sites/origin.ts` says the same thing in
+ * its header about its own tests.
+ */
+describe('the four callers agree on what is an http(s) location', () => {
+  // Excludes the literal `null` and any value over 255 characters: the two
+  // origin-returning callers apply documented rules of their own there, which
+  // is a difference in what they are for, not a disagreement about parsing.
+  const CORPUS = [
+    'https://abcplumbing.test',
+    'https://www.abcplumbing.test',
+    'http://abcplumbing.test',
+    'https://abcplumbing.test/contact?ref=1',
+    'https://abcplumbing.test:8443',
+    'abcplumbing.test',
+    'www.abcplumbing.test',
+    '  https://abcplumbing.test  ',
+    '\thttps://evil.test',
+    '\nhttps://evil.test',
+    '\rhttps://evil.test',
+    'ht\ttps://evil.test',
+    'https:/\\evil.test',
+    'https:\\\\evil.test',
+    'file:///etc/passwd',
+    'mailto:a@b.test',
+    'javascript:alert(1)',
+    'chrome://settings',
+    'ftp://e.test/x',
+    'C:\\Windows',
+    '//evil.test/x',
+    '/contact',
+    'abcplumbing.test:8080',
+    '::::',
+    '',
+    '   ',
+  ];
+
+  it.each(CORPUS)('%j — all four accept it or all four refuse it', (input) => {
+    const accepted = [
+      normaliseOrigin(input) !== null,
+      toOrigin(input) !== undefined,
+      referrerHost(input) !== null,
+      normaliseWebsiteHost(input) !== null,
+    ];
+
+    expect(new Set(accepted).size, `${JSON.stringify(input)} -> ${accepted.join()}`).toBe(1);
+  });
+
+  it.each(CORPUS)('%j — and derive the same host from it', (input) => {
+    const origin = normaliseOrigin(input);
+    if (origin === null) return;
+
+    // The two origin-returning callers must not disagree at all.
+    expect(toOrigin(input)).toBe(origin);
+
+    // The two host-returning callers strip `www.`; the origin ones must not,
+    // because `www.x.test` and `x.test` are different origins to a browser.
+    const bare = new URL(origin).hostname.replace(/^www\./, '');
+    expect(referrerHost(input)).toBe(bare);
+    expect(normaliseWebsiteHost(input)).toBe(bare);
+  });
+
+  it('⚠️ none of them can be talked into the fabricated host "https"', () => {
+    // The measured failure: a value a browser resolves to `evil.test` failed
+    // the prefix test, had `https://` prepended, and parsed with the authority
+    // `https`. Dev log 0018 recorded three different answers here; 0026 found
+    // a fifth copy and a fourth answer.
+    for (const input of ['\thttps://evil.test', 'ht\ttps://evil.test', 'https:/\\evil.test']) {
+      expect(normaliseOrigin(input), input).toBe('https://evil.test');
+      expect(toOrigin(input), input).toBe('https://evil.test');
+      expect(referrerHost(input), input).toBe('evil.test');
+      expect(normaliseWebsiteHost(input), input).toBe('evil.test');
+    }
+  });
+
+  it('⚠️ none of them manufacture an authority out of a path or a scheme name', () => {
+    // `/contact` became the origin `https://contact`; `file:///etc/passwd`
+    // became `https://file`; `mailto:a@b.test` borrowed the real domain
+    // `b.test` out of the opaque part.
+    for (const input of ['/contact', 'file:///etc/passwd', 'mailto:a@b.test', 'C:\\Windows']) {
+      expect(normaliseOrigin(input), input).toBeNull();
+      expect(toOrigin(input), input).toBeUndefined();
+      expect(referrerHost(input), input).toBeNull();
+      expect(normaliseWebsiteHost(input), input).toBeNull();
+    }
   });
 });
