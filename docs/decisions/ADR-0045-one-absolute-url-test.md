@@ -239,6 +239,12 @@ was already correct.
 54 appended to `packages/forms/src/public/public-path.test.ts`. Full suite
 **1,088 passed / 223 skipped (1,311)**, against 989 / 223 (1,212) at `f98aeb3`.
 
+The integration project was run rather than left skipped, because
+`lead-capture.integration.test.ts:689` asserts the stored `referrer_origin` for
+a value that passes through `toOrigin`. On a throwaway database migrated from
+zero and then destroyed (§7.2), the whole suite is **1,311 passed, 0 skipped**,
+the integration project contributing **223 passed**.
+
 **7 were observed red before the change**, by reverting only the four call sites
 to `f98aeb3` while keeping the helper and the tests, then restoring. The
 negative control: `http-url.test.ts`'s 45 passed in **both** states, which is
