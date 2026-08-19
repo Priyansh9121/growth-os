@@ -60,3 +60,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0028](0028-one-like-escaper.md)                         | One LIKE escaper, and a near-miss correcting 0018           | 2026-08-19 |
 | [0029](0029-the-body-ceiling-and-a-backlog-pass.md)      | The body ceiling, and 0018's backlog closed out             | 2026-08-19 |
 | [0030](0030-the-limits-merge-and-two-closed-items.md)    | The limits merge, and two items closed not carried          | 2026-08-19 |
+| [0031](0031-the-last-three-and-the-backlog-is-empty.md)  | The last three, and the cleanup backlog is empty            | 2026-08-19 |
