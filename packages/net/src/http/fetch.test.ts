@@ -18,7 +18,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { safeFetch, type SafeFetchDependencies } from './fetch';
+import {
+  DEFAULT_LIMITS,
+  resolveLimits,
+  safeFetch,
+  type LimitsOverride,
+  type SafeFetchDependencies,
+} from './fetch';
 import { TransportError } from './transport';
 import {
   FixtureResolver,
@@ -466,7 +472,10 @@ describe('response limits', () => {
     });
 
     const outcome = await safeFetch({ resolver, transport }, 'https://big.test/', {
-      limits: { maxCompressedBytes: 4096 },
+      // Both tiers, because they are one decision (ADR-0049). The decompressed
+      // cap is deliberately above the compressed one so the COMPRESSED rule is
+      // the one that bites — which is what this test is about.
+      limits: { maxCompressedBytes: 4096, maxDecompressedBytes: 4096 * 4 },
     });
 
     expect(outcome.ok).toBe(false);
@@ -487,7 +496,9 @@ describe('response limits', () => {
     });
 
     const outcome = await safeFetch({ resolver, transport }, 'https://big.test/', {
-      limits: { maxCompressedBytes: 1024 },
+      // Both tiers (ADR-0049). Neither is reached: the declared Content-Length
+      // is refused before a byte is read, which is the point of the test.
+      limits: { maxCompressedBytes: 1024, maxDecompressedBytes: 1024 * 4 },
     });
 
     expect(outcome.ok).toBe(false);
@@ -610,6 +621,105 @@ describe('transport failures become typed categories', () => {
     if (!outcome.ok) {
       expect(outcome.detail).toBe('CERT_HAS_EXPIRED');
       expect(outcome.detail).not.toContain('at ');
+    }
+  });
+});
+
+describe("⚠️ the limits override — one tier's cap cannot inherit the other's ratio", () => {
+  /**
+   * ADR-0048 found `verification.ts` permitting 8x expansion while asking to be
+   * the strictest caller in the codebase, because it stated
+   * `maxCompressedBytes` and inherited `maxDecompressedBytes` from
+   * `DEFAULT_LIMITS`. That instance was fixed at the call site; this is the
+   * merge that allowed it.
+   *
+   * The ratio a caller ends up with must be one it STATED or the default one —
+   * never a product of the two. That is the property below, not "the number is
+   * no longer 8x".
+   */
+  const ratio = (limits: { maxCompressedBytes: number; maxDecompressedBytes: number }): number =>
+    limits.maxDecompressedBytes / limits.maxCompressedBytes;
+
+  const DEFAULT_RATIO = ratio(DEFAULT_LIMITS);
+
+  it('leaves the defaults alone when nothing is overridden', () => {
+    expect(resolveLimits(undefined)).toEqual(DEFAULT_LIMITS);
+  });
+
+  it('lets maxRedirects be set alone — it is not part of the body decision', () => {
+    const resolved = resolveLimits({ maxRedirects: 3 });
+
+    expect(resolved.maxRedirects).toBe(3);
+    expect(resolved.maxCompressedBytes).toBe(DEFAULT_LIMITS.maxCompressedBytes);
+    expect(resolved.maxDecompressedBytes).toBe(DEFAULT_LIMITS.maxDecompressedBytes);
+    expect(ratio(resolved)).toBe(DEFAULT_RATIO);
+  });
+
+  it('uses exactly the two caps a caller states, including a shrinking one', () => {
+    // 0.5x — the compression-bomb test deliberately caps decompressed BELOW
+    // compressed. Any merge that derived one tier from the other would break it,
+    // which is why this refuses rather than derives.
+    const resolved = resolveLimits({
+      maxCompressedBytes: 2 * 1024 * 1024,
+      maxDecompressedBytes: 1024 * 1024,
+    });
+
+    expect(resolved.maxCompressedBytes).toBe(2 * 1024 * 1024);
+    expect(resolved.maxDecompressedBytes).toBe(1024 * 1024);
+    expect(ratio(resolved)).toBe(0.5);
+  });
+
+  it.each([
+    ['maxCompressedBytes only', { maxCompressedBytes: 1024 * 1024 }],
+    ['maxDecompressedBytes only', { maxDecompressedBytes: 4 * 1024 * 1024 }],
+  ])('⚠️ refuses a half-stated body override — %s', (_label, override) => {
+    // The type already rejects this shape as an object literal, which is how
+    // every call site here is written. This closes the remaining hole: a value
+    // assembled elsewhere and typed `Partial<ResponseLimits>` IS assignable to
+    // the "neither" arm, measured while designing ADR-0049.
+    expect(() => resolveLimits(override as LimitsOverride)).toThrow(TypeError);
+    expect(() => resolveLimits(override as LimitsOverride)).toThrow(/together/);
+  });
+
+  it('⚠️ refuses the exact override that produced ADR-0048s 8x ratio', () => {
+    // verification.ts before e1def2b: 1 MB stated, 8 MB inherited.
+    expect(() => resolveLimits({ maxCompressedBytes: 1024 * 1024 } as LimitsOverride)).toThrow(
+      TypeError,
+    );
+  });
+
+  it('⚠️ PROPERTY: every resolvable override yields a stated or default ratio', () => {
+    // The strong property. Not "no longer 8x" but "never a number nobody chose".
+    const overrides: LimitsOverride[] = [
+      {},
+      { maxRedirects: 1 },
+      { maxCompressedBytes: 4096, maxDecompressedBytes: 4096 * 4 },
+      { maxCompressedBytes: 1024, maxDecompressedBytes: 1024 * 4 },
+      { maxCompressedBytes: 2 * 1024 * 1024, maxDecompressedBytes: 1024 * 1024 },
+      { maxCompressedBytes: 1024 * 1024, maxDecompressedBytes: 4 * 1024 * 1024, maxRedirects: 3 },
+    ];
+
+    for (const override of overrides) {
+      const resolved = resolveLimits(override);
+      const stated =
+        override.maxCompressedBytes !== undefined && override.maxDecompressedBytes !== undefined
+          ? override.maxDecompressedBytes / override.maxCompressedBytes
+          : DEFAULT_RATIO;
+
+      expect(ratio(resolved), JSON.stringify(override)).toBe(stated);
+    }
+  });
+
+  it('⚠️ PROPERTY: a tighter wire cap can no longer loosen the expansion ratio', () => {
+    // The defect stated as an invariant. Under the old merge, halving
+    // maxCompressedBytes doubled the ratio, so the strictest caller was the
+    // loosest one. Every caller that CAN resolve now holds its ratio fixed.
+    for (const compressed of [1024, 4096, 1024 * 1024, 2 * 1024 * 1024]) {
+      const resolved = resolveLimits({
+        maxCompressedBytes: compressed,
+        maxDecompressedBytes: compressed * 4,
+      });
+      expect(ratio(resolved), `${compressed} B`).toBe(4);
     }
   });
 });

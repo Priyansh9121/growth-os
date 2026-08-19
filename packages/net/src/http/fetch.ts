@@ -151,6 +151,77 @@ export const DEFAULT_LIMITS: ResponseLimits = {
   maxRedirects: 5,
 };
 
+/**
+ * What a caller may override.
+ *
+ * ⚠️ THE TWO BODY TIERS ARE ONE DECISION, SO THEY ARE SUPPLIED TOGETHER OR NOT
+ * AT ALL. `maxRedirects` is independent and may be given alone.
+ *
+ * This shape exists because a plain `Partial<ResponseLimits>` let a caller
+ * state one tier and inherit the other from `DEFAULT_LIMITS` — which does not
+ * merge a number so much as merge a RATIO nobody chose. Measured (ADR-0049),
+ * across every caller that has ever passed a partial object:
+ *
+ * | override                        | effective ratio |
+ * | ------------------------------- | --------------- |
+ * | `DEFAULT_LIMITS`                | 4x              |
+ * | `{ maxCompressedBytes: 1 MB }`  | **8x**          |
+ * | `{ maxCompressedBytes: 4096 }`  | **2048x**       |
+ * | `{ maxCompressedBytes: 1024 }`  | **8192x**       |
+ *
+ * The tighter the wire cap a caller asks for, the looser the expansion it
+ * silently accepts — exactly backwards, and the reason ADR-0048 found
+ * verification permitting 8x while asking to be the strictest caller in the
+ * codebase.
+ */
+export type LimitsOverride =
+  | {
+      readonly maxCompressedBytes?: never;
+      readonly maxDecompressedBytes?: never;
+      readonly maxRedirects?: number;
+    }
+  | {
+      readonly maxCompressedBytes: number;
+      readonly maxDecompressedBytes: number;
+      readonly maxRedirects?: number;
+    };
+
+/**
+ * Resolve an override against the defaults.
+ *
+ * ⚠️ THROWS RATHER THAN GUESSING, and rather than returning `ok: false`. A
+ * half-stated body override is a programming error, not a network condition:
+ * every `FetchFailure` describes something a remote host or the security
+ * pipeline did, and callers treat them as expected outcomes. `fetchRobots`
+ * fail-closes on any failure, so routing a developer's typo through that
+ * channel would turn it into "this site disallows crawling" and lose it.
+ *
+ * The type above already rejects a half-stated object literal, which is how
+ * every call site in this repository is written. This closes the remaining
+ * hole: a value assembled elsewhere and typed as `Partial<ResponseLimits>` is
+ * assignable to the first union arm, and measurement confirmed it compiles.
+ */
+export function resolveLimits(override: LimitsOverride | undefined): ResponseLimits {
+  if (override === undefined) return DEFAULT_LIMITS;
+
+  const compressed = override.maxCompressedBytes;
+  const decompressed = override.maxDecompressedBytes;
+
+  if ((compressed === undefined) !== (decompressed === undefined)) {
+    throw new TypeError(
+      'safeFetch limits: maxCompressedBytes and maxDecompressedBytes must be given together. ' +
+        'Supplying one and inheriting the other adopts an expansion ratio nobody chose ' +
+        '(see ADR-0049).',
+    );
+  }
+
+  return {
+    maxCompressedBytes: compressed ?? DEFAULT_LIMITS.maxCompressedBytes,
+    maxDecompressedBytes: decompressed ?? DEFAULT_LIMITS.maxDecompressedBytes,
+    maxRedirects: override.maxRedirects ?? DEFAULT_LIMITS.maxRedirects,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Options
 // ---------------------------------------------------------------------------
@@ -168,7 +239,7 @@ export function productionNetwork(): SafeFetchDependencies {
 export interface SafeFetchOptions {
   readonly method?: 'GET' | 'HEAD';
   readonly headers?: Readonly<Record<string, string>>;
-  readonly limits?: Partial<ResponseLimits>;
+  readonly limits?: LimitsOverride;
   readonly timeouts?: Partial<Timeouts>;
   readonly signal?: AbortSignal;
   /**
@@ -200,7 +271,7 @@ export async function safeFetch(
   options: SafeFetchOptions = {},
 ): Promise<FetchOutcome> {
   const startedAt = Date.now();
-  const limits = { ...DEFAULT_LIMITS, ...options.limits };
+  const limits = resolveLimits(options.limits);
   const timeouts: Timeouts = { ...DEFAULT_TIMEOUTS, ...options.timeouts };
   const redirects: FetchRedirectHop[] = [];
 
