@@ -22,7 +22,17 @@
  */
 
 import { and, eq, lt, sql } from 'drizzle-orm';
-import { schemaTables, type Database } from '@growth-os/database';
+import { enqueue, schemaTables, type Database } from '@growth-os/database';
+
+/**
+ * Re-exported so the worker's own modules and tests keep one import site.
+ *
+ * ⚠️ THE DEFINITION LIVES IN `@growth-os/database`, NOT HERE. An app cannot
+ * import another app, so while this was the worker's own function the web app
+ * had no way to schedule work at all — and the first caller that needed one
+ * would have written a second insert that missed the dedupe.
+ */
+export { enqueue };
 
 const { jobs } = schemaTables;
 
@@ -129,37 +139,6 @@ export async function failJob(
       ...(exhausted ? { completedAt: now } : {}),
     })
     .where(eq(jobs.id, job.id));
-}
-
-/**
- * Enqueue a job.
- *
- * `dedupeKey` makes it idempotent: a scheduler firing twice — two workers, a
- * restart, a clock adjustment — enqueues once, because the unique index
- * refuses the second. The check is the DATABASE's, not the application's, since
- * two schedulers racing is exactly when an application check loses.
- */
-export async function enqueue(
-  db: Database,
-  input: {
-    name: string;
-    payload?: Record<string, string | number | boolean>;
-    runAt?: Date;
-    dedupeKey?: string;
-  },
-): Promise<boolean> {
-  const inserted = await db
-    .insert(jobs)
-    .values({
-      name: input.name,
-      payload: input.payload ?? null,
-      runAt: input.runAt ?? new Date(),
-      dedupeKey: input.dedupeKey ?? null,
-    })
-    .onConflictDoNothing({ target: jobs.dedupeKey })
-    .returning({ id: jobs.id });
-
-  return inserted.length > 0;
 }
 
 /**
