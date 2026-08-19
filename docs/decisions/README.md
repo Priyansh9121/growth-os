@@ -9,6 +9,34 @@ was rejected and why, and what it costs.
 2. **Immutable once `Accepted`.** Changing your mind means writing a new ADR
    that supersedes the old one. The old record stays, marked `Superseded by
 ADR-NNNN`. The history of reversals is itself valuable.
+
+   **⚠️ Exception — a correction block, for a claim that was never true.** An
+   Accepted ADR that states something factually wrong about **what is
+   implemented** may carry a dated correction block immediately beneath its
+   `Status` line. The body is left untouched.
+
+   The distinction is the whole point. A **superseding ADR** is for a decision
+   someone changed their mind about, and the old reasoning stays readable
+   because it was right at the time. A **correction block** is for a sentence
+   that was never right — an ADR describing a control as wired when nothing
+   calls it, or a path as existing when it does not. Superseding that would
+   misfile it as a reversal, and leaving it alone means the next reader believes
+   a protection is in force when it is not, which is the harm the record was
+   supposed to prevent.
+
+   Format, and keep it to this:
+
+   ```markdown
+   > ⚠️ **Correction, YYYY-MM-DD — <what is false>.**
+   > <the true statement>, verified in <dev log or ADR>.
+   >
+   > The decision this ADR records is unchanged. Only the claim about what is
+   > implemented is wrong; the body is left exactly as written.
+   ```
+
+   ADR-0023 carries the first one. It was added as a judgement call in dev log
+   0024 before this rule existed, and this rule formalises it.
+
 3. **Record rejected alternatives.** An ADR that lists only the winner is a
    press release. The rejected options are the reason the record exists.
 4. **Record the cost.** Every decision has one. An ADR with no "Consequences —
@@ -128,3 +156,4 @@ ADRs, docs, code.
 | [0041](ADR-0041-query-identity-preserves-bytes.md)          | A query value is octets; normalising it must not decode      | Accepted |
 | [0042](ADR-0042-frontier-bound-and-precise-skip-reasons.md) | The frontier URL bound, and two skip reasons the enum lacked | Accepted |
 | [0043](ADR-0043-aspsessionid-prefix-match.md)               | One session parameter is matched by prefix, and only one     | Accepted |
+| [0044](ADR-0044-one-landing-path-normaliser.md)             | One definition of the landing path for a URL                 | Accepted |

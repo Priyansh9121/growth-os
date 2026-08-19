@@ -709,6 +709,63 @@ describeIntegration('lead capture', () => {
       expect(JSON.stringify(row)).not.toContain('sarah@example.test');
       expect(JSON.stringify(row)).not.toContain('secret');
     });
+
+    // -----------------------------------------------------------------------
+    // ⚠️ The shape check, asserted against the COLUMN — see ADR-0044
+    // -----------------------------------------------------------------------
+
+    it.each([
+      ['a bare scheme-ish string', '::::'],
+      ['a javascript: URL', 'javascript:alert(1)'],
+      ['a mailto: URL', 'mailto:a@b.test'],
+      ['a tel: URL', 'tel:+61400000000'],
+      ['a data: URL', 'data:text/html,<b>x</b>'],
+      ['prose', 'not a url at all'],
+      ['a traversal attempt', '../../etc/passwd'],
+    ])('⚠️ does not store %s as a landing path', async (_label, hostile) => {
+      // §6: the strong property is what reached the COLUMN, not what a
+      // function returned. Each of these was previously written to
+      // `acquisitions.landing_path` — `::::` as `/::::`, `javascript:alert(1)`
+      // as `alert(1)` (dev log 0024, re-measured in 0025).
+      const key = await publishedForm(workspaceA);
+      const form = await resolvePublicForm(harness.app as unknown as Database, key);
+
+      const result = await submitPublicForm(submitDeps(), {
+        form: form!,
+        input: submission({ context: { landingPath: hostile } }),
+        ipAddress: '203.0.113.10',
+        origin: APP_URL,
+        correlationId: null,
+      });
+
+      // ⚠️ THE LEAD IS STILL CAPTURED. A malformed referrer is ordinary
+      // traffic; refusing the attribution must never refuse the customer.
+      expect(result.kind).toBe('accepted');
+
+      const [row] = await harness.owner.select().from(acquisitions);
+      expect(row).toBeTruthy();
+      expect(row?.landingPath).toBeNull();
+    });
+
+    it('still stores a landing path a real browser would send', async () => {
+      // The negative control: the tracker sends `window.location.pathname`, so
+      // the shape check must be invisible to every legitimate submission.
+      const key = await publishedForm(workspaceA);
+      const form = await resolvePublicForm(harness.app as unknown as Database, key);
+
+      await submitPublicForm(submitDeps(), {
+        form: form!,
+        input: submission({
+          context: { landingPath: '/blog/2026/03/fixing-a-tap?utm_source=google' },
+        }),
+        ipAddress: '203.0.113.10',
+        origin: APP_URL,
+        correlationId: null,
+      });
+
+      const [row] = await harness.owner.select().from(acquisitions);
+      expect(row?.landingPath).toBe('/blog/2026/03/fixing-a-tap');
+    });
   });
 
   // -------------------------------------------------------------------------

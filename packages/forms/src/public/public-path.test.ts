@@ -10,7 +10,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { formVersionConfigSchema, type FormFieldConfig } from '@growth-os/contracts';
+import {
+  formVersionConfigSchema,
+  splitLandingUrl,
+  type FormFieldConfig,
+} from '@growth-os/contracts';
 import { isFirstPartyOrigin, isOriginAllowed, normaliseOrigin } from '@growth-os/sites';
 import { evaluateAbuseSignals } from './abuse';
 import { honeypotKeyFor } from './honeypot';
@@ -282,6 +286,119 @@ describe('attribution sanitisation', () => {
     it('returns undefined for an unparseable value rather than storing it', () => {
       expect(toPath('')).toBeUndefined();
       expect(toPath(undefined)).toBeUndefined();
+    });
+
+    // -----------------------------------------------------------------------
+    // ⚠️ The shape check — see ADR-0044
+    // -----------------------------------------------------------------------
+
+    describe('⚠️ refuses anything that is not shaped like a landing path', () => {
+      // `new URL(x, base)` RESOLVES almost any string against the base rather
+      // than throwing, so relying on the throw alone stored these. Measured in
+      // dev log 0024 and re-measured in 0025; each was written to the
+      // `landing_path` column of a real acquisition.
+      it.each([
+        ['a bare scheme-ish string', '::::', '/::::'],
+        ['a javascript: URL', 'javascript:alert(1)', 'alert(1)'],
+        ['a mailto: URL', 'mailto:a@b.test', 'a@b.test'],
+        ['a tel: URL', 'tel:+61400000000', '+61400000000'],
+        ['a data: URL', 'data:text/html,<b>x</b>', 'text/html,<b>x</b>'],
+        ['prose', 'not a url at all', '/not%20a%20url%20at%20all'],
+        ['a traversal attempt', '../../etc/passwd', '/etc/passwd'],
+      ])('refuses %s, which used to be stored as %s', (_label, input) => {
+        expect(toPath(input)).toBeUndefined();
+      });
+    });
+
+    describe('the shapes a real browser sends are untouched', () => {
+      // The tracker sends `window.location.pathname`, which always starts with
+      // `/`. Nothing legitimate is caught by the shape check.
+      it.each([
+        ['/', '/'],
+        ['/about', '/about'],
+        ['/emergency-plumber-melbourne', '/emergency-plumber-melbourne'],
+        ['/blog/2026/03/fixing-a-tap', '/blog/2026/03/fixing-a-tap'],
+        ['/booking?email=sarah@example.test', '/booking'],
+        ['/caf%C3%A9', '/caf%C3%A9'],
+        ['https://abcplumbing.test/pricing', '/pricing'],
+        ['http://abcplumbing.test/pricing', '/pricing'],
+        ['HTTPS://ABCPLUMBING.TEST/Pricing', '/Pricing'],
+      ])('%s stays %s', (input, expected) => {
+        expect(toPath(input)).toBe(expected);
+      });
+    });
+
+    it('⚠️ PROPERTY: anything it returns is a path — it starts with "/"', () => {
+      // The invariant that makes the column mean what it says. Before the shape
+      // check, 8 of 14 hostile inputs produced a value that was NOT a path:
+      // `alert(1)`, `a@b.test`, `+61400000000`, `blank`, `msgbox(1)`,
+      // `void(0)`, `text/html,<b>x</b>`, `\\Windows\\system32`.
+      const corpus = [
+        '/',
+        '/about',
+        '/a/b/c',
+        'https://e.test/x',
+        'http://e.test/',
+        '//e.test/y',
+        '::::',
+        'javascript:alert(1)',
+        'mailto:a@b.test',
+        'tel:+61400000000',
+        'data:text/html,<b>x</b>',
+        'not a url at all',
+        '../../etc/passwd',
+        'ftp://e.test/x',
+        'file:///etc/passwd',
+        'about:blank',
+        'chrome://settings',
+        'vbscript:msgbox(1)',
+        'C:\\Windows\\system32',
+        '',
+        '   ',
+        'e.test/x',
+        '?q=1',
+        '#frag',
+        'HTTPS://E.TEST/Z',
+      ];
+
+      for (const input of corpus) {
+        const result = toPath(input);
+        if (result !== undefined) {
+          expect(result.startsWith('/'), `${JSON.stringify(input)} -> ${result}`).toBe(true);
+        }
+      }
+    });
+
+    it('⚠️ PROPERTY: agrees with splitLandingUrl on every input', () => {
+      // The defect was two answers to one question, and the live one was the
+      // permissive one. They now share the step, so this asserts they cannot
+      // drift apart again.
+      const inputs = [
+        'https://e.test/pricing?utm_source=g',
+        '/pricing?utm_source=g',
+        '::::',
+        'javascript:alert(1)',
+        'mailto:a@b.test',
+        'not a url at all',
+        '../../etc/passwd',
+        '//evil.test/x',
+        'https://e.test/',
+        '',
+        '   ',
+        'data:text/html,<b>x</b>',
+        'tel:+61400000000',
+        '/a/../b',
+        'ftp://e.test/x',
+      ];
+
+      for (const input of inputs) {
+        const live = toPath(input);
+        const split = splitLandingUrl(input);
+        expect(live === undefined, `accept/reject disagreement on ${JSON.stringify(input)}`).toBe(
+          split === null,
+        );
+        if (split !== null) expect(live, input).toBe(split.landingPath);
+      }
     });
   });
 

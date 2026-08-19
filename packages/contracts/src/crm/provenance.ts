@@ -155,6 +155,56 @@ export function requiresConfidenceCaveat(confidence: ProvenanceConfidence): bool
  * Returns `null` for an unparseable URL rather than throwing: a malformed
  * referrer is normal and must not fail an acquisition.
  */
+/**
+ * The one definition of "what is the landing path for this URL?".
+ *
+ * ⚠️ THIS EXISTS BECAUSE THERE WERE TWO, AND THE LIVE ONE WAS THE PERMISSIVE
+ * ONE. `toPath` in `@growth-os/forms` answered the same question by calling
+ * `new URL()` and trusting it to throw. It does not throw: it **resolves**
+ * almost any string against the base. Measured over 13 inputs the two disagreed
+ * about 7, and every one of those was written to `acquisitions.landing_path`
+ * (dev log 0024, re-measured in 0025).
+ *
+ * Both callers now share this step, so they cannot drift apart again — asserted
+ * as a property in `public-path.test.ts` rather than left to review.
+ *
+ * ⚠️ THE SHAPE CHECK COMES BEFORE THE PARSE, and that ordering is the fix.
+ * Only an absolute `http(s)` URL or a rooted path is a plausible landing
+ * target. `javascript:alert(1)`, `mailto:`, `tel:`, `data:` and `::::` all
+ * parse — into a `pathname` that is not a path.
+ *
+ * Returns `null` rather than throwing, and **rather than guessing**: a
+ * malformed referrer is normal traffic and must not fail an acquisition. The
+ * caller drops the field and keeps the lead.
+ *
+ * ⚠️ NO LENGTH CAP HERE. Each caller stores into a different column with a
+ * different bound, and a cap applied twice at different widths is how they stop
+ * agreeing.
+ *
+ * @see docs/decisions/ADR-0044-one-landing-path-normaliser.md
+ */
+export function landingPathOf(rawUrl: string): string | null {
+  const trimmed = rawUrl.trim();
+  if (trimmed.length === 0) return null;
+
+  // ⚠️ SHAPE BEFORE PARSE. `new URL(x, base)` resolves almost any string
+  // against the base rather than throwing, so relying on the throw alone
+  // happily turns '::::' into the landing path '/::::' and stores it.
+  const looksAbsolute = /^https?:\/\//i.test(trimmed);
+  if (!looksAbsolute && !trimmed.startsWith('/')) return null;
+
+  let url: URL;
+  try {
+    url = new URL(trimmed, 'https://placeholder.invalid');
+  } catch {
+    return null;
+  }
+
+  // A parsed URL always has a pathname, but never assume it: an empty one is
+  // the root, and storing '' would be a third spelling of '/'.
+  return url.pathname.length === 0 ? '/' : url.pathname;
+}
+
 export function splitLandingUrl(rawUrl: string): {
   landingPath: string;
   utm: Pick<Provenance, 'utmSource' | 'utmMedium' | 'utmCampaign' | 'utmTerm' | 'utmContent'>;
@@ -163,12 +213,8 @@ export function splitLandingUrl(rawUrl: string): {
 } | null {
   const trimmed = rawUrl.trim();
 
-  // Shape check BEFORE parsing. `new URL(x, base)` resolves almost any string
-  // against the base rather than throwing, so relying on the throw alone would
-  // happily turn '::::' into the landing path '/::::' and store it. Only an
-  // absolute http(s) URL or a rooted path is a plausible landing target.
-  const looksAbsolute = /^https?:\/\//i.test(trimmed);
-  if (!looksAbsolute && !trimmed.startsWith('/')) return null;
+  const landingPath = landingPathOf(trimmed);
+  if (landingPath === null) return null;
 
   let url: URL;
   try {
@@ -183,7 +229,7 @@ export function splitLandingUrl(rawUrl: string): {
   };
 
   return {
-    landingPath: url.pathname.slice(0, MAX_URL_LENGTH),
+    landingPath: landingPath.slice(0, MAX_URL_LENGTH),
     utm: {
       utmSource: read('utm_source'),
       utmMedium: read('utm_medium'),
