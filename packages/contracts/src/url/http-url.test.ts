@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { httpUrlOf } from './http-url';
+import { bareHostOf, httpUrlOf } from './http-url';
 
 /** The shapes a browser or a tracker actually sends. */
 const REALISTIC: ReadonlyArray<readonly [string, string]> = [
@@ -180,6 +180,53 @@ describe('httpUrlOf — properties, not descriptions', () => {
         expect(httpUrlOf(ch + input)?.origin ?? null, input).toBe(expected);
         expect(httpUrlOf(input + ch)?.origin ?? null, input).toBe(expected);
       }
+    }
+  });
+});
+
+describe('bareHostOf — the shared half of two callers in two packages', () => {
+  it.each([
+    ['https://www.abcplumbing.test/contact?x=1', 'abcplumbing.test'],
+    ['https://abcplumbing.test', 'abcplumbing.test'],
+    ['https://WWW.ABCPlumbing.TEST', 'abcplumbing.test'],
+    ['abcplumbing.test', 'abcplumbing.test'],
+    ['www.abcplumbing.test', 'abcplumbing.test'],
+    ['https://sub.abcplumbing.test', 'sub.abcplumbing.test'],
+  ])('%j -> %j', (input, expected) => {
+    expect(bareHostOf(input)).toBe(expected);
+  });
+
+  it('agrees with itself about the www and non-www spelling of one site', () => {
+    expect(bareHostOf('https://www.x.test')).toBe(bareHostOf('https://x.test'));
+  });
+
+  it('⚠️ strips www where normaliseOrigin must NOT — they answer different questions', () => {
+    // To a browser these are different ORIGINS, which is why the origin path
+    // keeps the prefix. These callers are matching a SITE, where a customer
+    // typing either means the same company.
+    expect(bareHostOf('https://www.x.test')).toBe('x.test');
+  });
+
+  it.each([
+    ['', 'empty'],
+    ['   ', 'whitespace'],
+    ['::::', 'garbage'],
+    ['javascript:alert(1)', 'a non-http scheme'],
+    ['/contact', 'a path'],
+  ])('%j is null (%s)', (input) => {
+    expect(bareHostOf(input)).toBeNull();
+  });
+
+  it.each([[null], [undefined]])('%j is null', (input) => {
+    expect(bareHostOf(input)).toBeNull();
+  });
+
+  it('inherits every refusal httpUrlOf makes', () => {
+    // Not a restatement: it proves the two are one pipeline, so a tightening in
+    // httpUrlOf cannot leave bareHostOf accepting something the parser refused.
+    for (const input of ['file:///etc/passwd', 'mailto:a@b.test', 'abcplumbing.test:8080']) {
+      expect(httpUrlOf(input), input).toBeNull();
+      expect(bareHostOf(input), input).toBeNull();
     }
   });
 });

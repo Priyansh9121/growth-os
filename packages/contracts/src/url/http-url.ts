@@ -103,3 +103,30 @@ export function httpUrlOf(input: string | null | undefined): URL | null {
 
   return httpOrNull(parseOrNull(`https://${cleaned}`));
 }
+
+/**
+ * The bare host of a URL-ish string: lowercased, `www.` removed.
+ *
+ * ⚠️ A URL FACT, NOT A DOMAIN RULE. Two callers in two packages had written
+ * these same three lines — `referrerHost` in `@growth-os/contracts` (which
+ * source a visit came from) and `normaliseWebsiteHost` in `@growth-os/crm`
+ * (a weak identity key for company deduplication). They answer the same
+ * question for different reasons, and the question is about URLs.
+ *
+ * What stays with each caller is the domain rule: that a referrer host selects
+ * a source platform, and that a website host is a dedup signal. Only "what is
+ * the host" is shared.
+ *
+ * ⚠️ `www.` IS STRIPPED HERE AND MUST NOT BE STRIPPED BY `normaliseOrigin`.
+ * To a browser `https://www.x.test` and `https://x.test` are different origins,
+ * so the origin path deliberately preserves the prefix. These two callers are
+ * matching a site, not an origin, where a customer typing either means the
+ * same company.
+ */
+export function bareHostOf(input: string | null | undefined): string | null {
+  const url = httpUrlOf(input);
+  if (url === null) return null;
+
+  const host = url.hostname.toLowerCase();
+  return host.startsWith('www.') ? host.slice(4) : host;
+}
