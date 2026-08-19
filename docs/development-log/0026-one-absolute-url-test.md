@@ -197,6 +197,19 @@ where 0025 put it — correct, but not where the schema implies it lives.
 `public-path.test.ts`. `verify:all` exit 0: **1,088 passed / 223 skipped
 (1,311)**, against 989 / 223 (1,212) at the start. 29 boundary probes.
 
+⚠️ **The integration project was run, not left skipped, because this change is
+on a path it asserts.** `lead-capture.integration.test.ts:689` submits
+`https://www.google.com/search?q=…` and asserts the stored `referrer_origin` is
+`https://www.google.com` — which goes through `toOrigin`, one of the four
+rewired functions. Leaving that skipped would have meant reporting a change to a
+column without running the test that reads it.
+
+Per §7.2: a throwaway database was created, migrations applied **from zero**
+(all of them, not the 0007 the local development database sits at), the suite
+run against it, and the database dropped and confirmed gone. With
+`TEST_DATABASE_URL` set the whole suite is **1,311 passed, 0 skipped** — the
+integration project contributing **223 passed**.
+
 **7 observed red before the change**, by reverting only the four call sites to
 `f98aeb3` while keeping the helper and the tests, then restoring. The negative
 control: `http-url.test.ts`'s 45 passed in **both** states.
