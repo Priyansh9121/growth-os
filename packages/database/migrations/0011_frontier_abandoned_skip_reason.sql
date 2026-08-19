@@ -1,0 +1,17 @@
+-- A frontier row belonging to a crawl nobody is running any more.
+--
+-- When a worker dies with the database, its crawl is left `running` forever and
+-- the reaper marks it `failed` (ADR-0055). The URLs it had queued were never
+-- fetched and never will be — but there is no honest existing reason to record
+-- against them.
+--
+-- `cancelled` is the near miss, and it is the one this deliberately does not
+-- reuse: it asserts that an operator decided to stop, which is precisely what
+-- did NOT happen. Nobody decided anything; a process died. Recording an
+-- operator's decision that was never made is the same class of typed lie as
+-- ADR-0042's two splits — `url_too_long` out of `unsupported_scheme`, and
+-- `budget_exhausted` out of `robots_disallowed` — and as migration 0010's
+-- `internal_error`, added for exactly this reason one session ago.
+--
+-- AGENTS.md §5: a skip reason records what happened, never a judgement.
+ALTER TYPE "public"."crawl_skip_reason" ADD VALUE IF NOT EXISTS 'abandoned';

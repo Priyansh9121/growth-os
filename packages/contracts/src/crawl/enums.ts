@@ -161,6 +161,15 @@ export const SKIP_REASONS = [
    * express it.
    */
   'budget_exhausted',
+  /**
+   * The crawl that queued this URL was abandoned by a worker that died.
+   *
+   * ⚠️ NOT `cancelled`, which asserts an operator decided to stop. Nobody
+   * decided anything here — a process died and the crawl was reaped
+   * (ADR-0055). The distinction matters to the only person who reads it: one
+   * says "you stopped this", the other says "we lost it".
+   */
+  'abandoned',
 ] as const;
 export type SkipReason = (typeof SKIP_REASONS)[number];
 
@@ -177,6 +186,7 @@ export const SKIP_REASON_LABELS: Readonly<Record<SkipReason, string>> = {
   url_too_long: 'URL was longer than we crawl',
   // ⚠️ Says what happened, never that the site is at fault (AGENTS.md §5).
   budget_exhausted: 'Rule was too costly to evaluate',
+  abandoned: 'The crawl was abandoned before this URL was reached',
 };
 
 // ---------------------------------------------------------------------------
