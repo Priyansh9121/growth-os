@@ -8,6 +8,7 @@
  */
 export * from './client';
 export * from './audit';
+export * from './jobs';
 export * as schemaTables from './schema/index';
 export { AUDIT_EVENTS, type AuditEventName } from './schema/audit';
 export type {
