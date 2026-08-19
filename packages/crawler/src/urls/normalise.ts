@@ -98,7 +98,6 @@ const TRACKING_SET = new Set(TRACKING_PARAMETERS);
 const SESSION_PARAMETERS: readonly string[] = [
   'phpsessid',
   'jsessionid',
-  'aspsessionid',
   'sessionid',
   'sid',
   'cfid',
@@ -109,6 +108,32 @@ const SESSION_PARAMETERS: readonly string[] = [
 ];
 
 const SESSION_SET = new Set(SESSION_PARAMETERS);
+
+/**
+ * Session parameters matched by PREFIX rather than by exact name.
+ *
+ * ⚠️ EXACTLY ONE ENTRY, AND IT EARNED ITS EXCEPTION BY MEASUREMENT.
+ *
+ * IIS emits a Classic ASP session id as `ASPSESSIONID` followed by **eight
+ * letters that differ per application pool** — `ASPSESSIONIDQWERTY`,
+ * `ASPSESSIONIDACSSDACR`. The bare name `aspsessionid` is never sent, so the
+ * exact-match entry that used to sit in the list above could not fire on any
+ * real request. Measured (dev log 0022, re-measured in 0024): every realistic
+ * IIS name was **kept**, and a kept session id is a new crawl identity per
+ * visitor — one template consuming the entire budget, which is the exact
+ * failure the session list exists to prevent.
+ *
+ * ⚠️ PREFIX MATCHING IS A WIDER NET, AND WIDER NETS COLLAPSE IDENTITIES.
+ * §5 makes URL identity singular, so this list stays at one entry and every
+ * other name stays an exact match. `sid` as a prefix would strip `sidebar`;
+ * `ref` would strip `refresh`. Measured over 80 realistic parameter names, the
+ * prefix changes the classification of **5** — every one an IIS session id —
+ * and leaves the other 75 untouched, including `asp`, `aspect`, `aspnet`,
+ * `aspx` and `aspect_ratio`.
+ *
+ * @see docs/decisions/ADR-0043-aspsessionid-prefix-match.md
+ */
+const SESSION_PARAMETER_PREFIXES: readonly string[] = ['aspsessionid'];
 
 export interface NormaliseOptions {
   /**
@@ -332,6 +357,7 @@ function normaliseQuery(search: string): string {
     // false strip it would prevent. ADR-0041 records the measurement.
     const lower = name.toLowerCase();
     if (TRACKING_SET.has(lower) || SESSION_SET.has(lower)) continue;
+    if (SESSION_PARAMETER_PREFIXES.some((prefix) => lower.startsWith(prefix))) continue;
 
     kept.push([name, value]);
   }
@@ -389,6 +415,8 @@ function normalisePercentEncoding(path: string): string {
 export const STRIPPED_PARAMETERS = {
   tracking: TRACKING_PARAMETERS,
   session: SESSION_PARAMETERS,
+  /** Matched by prefix, not by exact name. See `SESSION_PARAMETER_PREFIXES`. */
+  sessionPrefixes: SESSION_PARAMETER_PREFIXES,
 } as const;
 
 /**

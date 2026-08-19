@@ -630,3 +630,66 @@ describe('⚠️ query values keep their bytes — URL identity is singular', ()
     expect(normaliseUrl('https://e.test./x')).toBe('https://e.test/x');
   });
 });
+
+// ---------------------------------------------------------------------------
+// §6 the session parameter that never matched — dev log 0018/0022, ADR-0043
+// ---------------------------------------------------------------------------
+
+describe('⚠️ ASPSESSIONID — a strip-list entry that could never fire', () => {
+  /** IIS emits ASPSESSIONID followed by eight letters, different per app pool. */
+  const iisNames = [
+    'ASPSESSIONIDQWERTY',
+    'ASPSESSIONIDACSSDACR',
+    'ASPSESSIONIDSQBSTBRA',
+    'ASPSESSIONIDCCTBQBTA',
+  ];
+
+  it.each(iisNames)('strips the real IIS parameter %s', (name) => {
+    // Measured in dev log 0022 and re-measured here: the exact-match entry
+    // `aspsessionid` never fired, because IIS never emits that bare name. A
+    // session id that survives normalisation is a NEW identity per visitor, so
+    // one template consumes the whole crawl budget — the exact failure the
+    // session list exists to prevent.
+    expect(normaliseUrl(`https://e.test/p?${name}=abc123`)).toBe('https://e.test/p');
+  });
+
+  it('still strips the bare literal, and is case-insensitive', () => {
+    expect(normaliseUrl('https://e.test/p?aspsessionid=x')).toBe('https://e.test/p');
+    expect(normaliseUrl('https://e.test/p?ASPSESSIONID=x')).toBe('https://e.test/p');
+  });
+
+  it('⚠️ does NOT catch near-misses that are ordinary parameters', () => {
+    // A prefix rule is a wider net than an exact match, so the names it must
+    // NOT catch are the point. `aspect_ratio` is a real query parameter.
+    for (const name of ['asp', 'aspect', 'aspnet', 'aspx', 'asp_net', 'aspect_ratio', 'aspire']) {
+      expect(normaliseUrl(`https://e.test/p?${name}=v`), name).toBe(`https://e.test/p?${name}=v`);
+    }
+  });
+
+  it('⚠️ the prefix rule is the ONLY one — every other entry stays exact', () => {
+    // `sid` is in the session list. If prefix matching leaked to it, `sidebar`,
+    // `side` and `sid_type` would all be stripped and distinct pages would
+    // collapse into one identity (§5).
+    for (const name of ['sidebar', 'sidetable', 'sid_type', 'refresh', 'sourced', 'phpsessidx']) {
+      expect(normaliseUrl(`https://e.test/p?${name}=v`), name).toBe(`https://e.test/p?${name}=v`);
+    }
+  });
+
+  it('the prefix list is exported for documentation, and is exactly one entry', () => {
+    // If this grows, the differential in ADR-0043 has to be re-measured — a
+    // second prefix is a second chance to collapse two pages into one row.
+    expect(STRIPPED_PARAMETERS.sessionPrefixes).toEqual(['aspsessionid']);
+    expect(STRIPPED_PARAMETERS.session).not.toContain('aspsessionid');
+  });
+
+  it.each(STRIPPED_PARAMETERS.sessionPrefixes)('strips anything starting with %s', (prefix) => {
+    expect(normaliseUrl(`https://e.test/p?${prefix}ABCDEFGH=x`)).toBe('https://e.test/p');
+  });
+
+  it('keeps the value distinct from the strip decision', () => {
+    // Only the NAME decides. A value that looks like a session id is data.
+    expect(normaliseUrl('https://e.test/p?q=ASPSESSIONIDQWERTY')).toBe(
+      'https://e.test/p?q=ASPSESSIONIDQWERTY',
+    );
+  });
+});

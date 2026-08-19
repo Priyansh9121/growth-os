@@ -140,4 +140,39 @@ describe('neutraliseCsvFormula', () => {
     // `=cmd|'/c calc'!A1` is a spreadsheet exploit, not a name.
     expect(neutraliseCsvFormula("=cmd|'/c calc'!A1")).toBe("'=cmd|'/c calc'!A1");
   });
+
+  // -------------------------------------------------------------------------
+  // ⚠️ What this guard does NOT do — see dev log 0024
+  // -------------------------------------------------------------------------
+
+  describe('⚠️ the test is anchored at index 0', () => {
+    const payload = "=cmd|'/c calc'!A1";
+
+    it.each([
+      ['a space', ' '],
+      ['a BOM', '\uFEFF'],
+      ['a non-breaking space', '\u00A0'],
+      ['a line feed', '\n'],
+    ])('does NOT prefix a payload behind %s', (_label, lead) => {
+      // Pinned as a FACT about this function, not as a verdict about safety.
+      //
+      // ⚠️ Whether a spreadsheet still evaluates the formula after one of
+      // these characters is NOT something this project has measured — there is
+      // no spreadsheet in the test environment (AGENTS.md §6: do not assert what
+      // you could not measure). So this asserts only what the code does.
+      //
+      // It is here because the guard has no production caller, and the author
+      // who eventually wires an export needs the limitation to be executable
+      // rather than buried in a docstring.
+      const value = `${lead}${payload}`;
+      expect(neutraliseCsvFormula(value)).toBe(value);
+    });
+
+    it('does prefix TAB and CR, which ARE in the rule', () => {
+      // The contrast that makes the case above meaningful: the guard is not
+      // simply "first character only", it is "first character, from this set".
+      expect(neutraliseCsvFormula(`\t${payload}`)).toBe(`'\t${payload}`);
+      expect(neutraliseCsvFormula(`\r${payload}`)).toBe(`'\r${payload}`);
+    });
+  });
 });

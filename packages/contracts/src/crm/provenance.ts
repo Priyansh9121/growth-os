@@ -135,9 +135,22 @@ export function requiresConfidenceCaveat(confidence: ProvenanceConfidence): bool
 /**
  * Split a raw URL into a storable landing path plus UTM parameters.
  *
- * Used by ingestion paths that receive a full URL from a browser. Centralised
- * so that no caller stores a raw URL by accident — the query string is dropped
- * here, once, rather than being each caller's responsibility to remember.
+ * ⚠️ NO CALLERS. This is not wired to anything, and the claim it used to make —
+ * "used by ingestion paths that receive a full URL from a browser… centralised
+ * so that no caller stores a raw URL by accident" — was false in a way that
+ * mattered, because **another function is doing that job on the live path.**
+ *
+ * Verified in dev log 0024: the lead-capture path runs
+ * `submit.ts` → `sanitise.ts` → `toPath`, not this. Measured over 13 inputs,
+ * the two disagree about whether to accept **7** of them. `toPath` resolves
+ * anything `new URL(x, base)` will swallow, so it stores `/::::` for `::::`,
+ * `a@b.test` for `mailto:a@b.test` and `alert(1)` for `javascript:alert(1)` —
+ * which is precisely the failure the comment below this docstring says the
+ * shape check exists to prevent.
+ *
+ * ⚠️ That is a defect in `toPath`, on the live path, and it is NOT fixed here:
+ * it changes what lead capture stores and needs its own brief. Recorded so the
+ * next author does not read this function's promise and assume it is kept.
  *
  * Returns `null` for an unparseable URL rather than throwing: a malformed
  * referrer is normal and must not fail an acquisition.
