@@ -23,7 +23,7 @@
  * @see docs/decisions/ADR-0012-provenance-model.md
  */
 
-import { httpUrlOf } from '../url/http-url';
+import { bareHostOf } from '../url/http-url';
 import type { ProvenanceConfidence, SourcePlatform, SourceType } from '../crm/enums';
 import type { SubmissionContext } from './schemas';
 
@@ -77,13 +77,7 @@ const PAID_MEDIUMS = new Set(['cpc', 'ppc', 'paid', 'paidsearch', 'paid_search',
  * mangled referrer must not become a confident classification.
  */
 export function referrerHost(referrerOrigin: string | undefined): string | null {
-  if (!referrerOrigin) return null;
-
-  const url = httpUrlOf(referrerOrigin);
-  if (url === null) return null;
-
-  const host = url.hostname.toLowerCase();
-  return host.startsWith('www.') ? host.slice(4) : host;
+  return bareHostOf(referrerOrigin);
 }
 
 /** Match a host against a table, allowing subdomains (`m.facebook.com`). */
