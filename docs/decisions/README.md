@@ -165,3 +165,4 @@ ADRs, docs, code.
 | [0050](ADR-0050-sitemap-parsing.md)                         | Sitemap parsing: htmlparser2, and why truncation is safe     | Accepted |
 | [0051](ADR-0051-sitemap-fetch-is-fail-open.md)              | A sitemap that cannot be read fails OPEN, unlike robots.txt  | Accepted |
 | [0052](ADR-0052-sitemap-walk-bounds.md)                     | Walking a sitemap tree: three bounds, one admission path     | Accepted |
+| [0053](ADR-0053-the-crawl-run.md)                           | One crawl run: robots, then sitemap, then pages              | Accepted |
