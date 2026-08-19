@@ -23,6 +23,7 @@
 
 import { z } from 'zod';
 import {
+  CUSTOM_FIELD_KEY_MAX_LENGTH,
   CUSTOM_FIELD_TYPES,
   IMPORT_BATCH_STATUSES,
   IMPORT_FIELD_TARGETS,
@@ -345,7 +346,7 @@ const customFieldKey = z
   .string()
   .trim()
   .min(1)
-  .max(48)
+  .max(CUSTOM_FIELD_KEY_MAX_LENGTH)
   .regex(/^[a-z][a-z0-9_]*$/, 'Use lowercase letters, numbers and underscores.');
 
 export const createCustomFieldSchema = z
