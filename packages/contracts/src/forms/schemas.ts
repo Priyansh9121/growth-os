@@ -36,17 +36,41 @@ import {
 const uuid = z.uuid();
 
 /**
+ * Longest field key. A local bound deliberately, not
+ * `CUSTOM_FIELD_KEY_MAX_LENGTH`: this is the FORM's own key, and a CRM custom
+ * field key is a different concept that happens to share the number today
+ * (ADR-0046 made that call and it is not reversed here).
+ */
+const MAX_FIELD_KEY_LENGTH = 48;
+
+/**
  * A field's stable key.
  *
  * Generated once and never changed, because a submission is interpreted
  * through it. Renaming a LABEL is free; renaming a key would orphan meaning.
+ *
+ * ⚠️ THE QUANTIFIER IS BOUNDED, AND `.max()` ALONE IS NOT ENOUGH — the same
+ * shape ADR-0046 fixed on `fieldTarget`. zod v4 runs every check and collects
+ * all issues, so `.max()` bounds what is ACCEPTED and never what is EXAMINED:
+ * measured on this schema, the pattern ran against a full 200,000-character key
+ * after the length check had already failed.
+ *
+ * With `*` the cost was linear in the input — 166x end to end for a 1000x
+ * increase. Anchored with a finite bound, the engine tries one start offset,
+ * consumes at most 48 characters and gives up: flat at ~0.00013 ms from 1 KB to
+ * 4 MB, independent of input length rather than merely cheap.
+ *
+ * @see docs/decisions/ADR-0046-field-target-bound.md
  */
 const fieldKey = z
   .string()
   .trim()
   .min(1)
-  .max(48)
-  .regex(/^[a-z][a-z0-9_]*$/, 'Use lowercase letters, numbers and underscores.');
+  .max(MAX_FIELD_KEY_LENGTH)
+  .regex(
+    new RegExp(`^[a-z][a-z0-9_]{0,${MAX_FIELD_KEY_LENGTH - 1}}$`),
+    'Use lowercase letters, numbers and underscores.',
+  );
 
 /**
  * Longest `custom:<key>` target: the prefix plus the longest key the CRM will
