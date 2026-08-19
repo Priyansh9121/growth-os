@@ -244,6 +244,18 @@ export const CRAWL_FAILURE_CATEGORIES = [
   'parse_error',
   'http_4xx',
   'http_5xx',
+  /**
+   * The run itself failed — a lost database connection, a bug.
+   *
+   * ⚠️ EVERY OTHER MEMBER DESCRIBES WHAT A FETCH DID. This one describes what
+   * WE did, and it exists because the database insists on an answer: the
+   * `crawls_failed_has_category` CHECK refuses a failed crawl with no category,
+   * on the grounds that a failure with no explanation is a state an operator
+   * cannot act on. Without this member the only options were to leave a crashed
+   * crawl looking like it was still running, or to borrow a fetch category and
+   * tell the operator a typed lie.
+   */
+  'internal_error',
 ] as const;
 export type CrawlFailureCategory = (typeof CRAWL_FAILURE_CATEGORIES)[number];
 
@@ -275,6 +287,7 @@ export const CRAWL_FAILURE_LABELS: Readonly<Record<CrawlFailureCategory, string>
   parse_error: 'The HTML could not be parsed',
   http_4xx: 'Not found or refused',
   http_5xx: 'Server error',
+  internal_error: 'Growth OS could not complete the crawl',
 };
 
 /**

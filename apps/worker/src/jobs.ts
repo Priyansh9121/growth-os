@@ -16,6 +16,8 @@
 
 import { pruneExpiredResetTokens, pruneExpiredSessions } from '@growth-os/auth';
 import { pruneRateLimitWindows } from '@growth-os/forms';
+import { RUN_CRAWL_JOB } from '@growth-os/sites';
+import { runCrawlJob } from './jobs/run-crawl';
 import type { JobDefinition } from './queue';
 
 const HOURLY = 3600;
@@ -49,6 +51,20 @@ export const JOBS: readonly JobDefinition[] = [
       // pure storage reclamation and safe to miss.
       await pruneRateLimitWindows(db, new Date(now.getTime() - 24 * 3600 * 1000));
     },
+  },
+  {
+    /**
+     * ⚠️ NO `everySeconds`. This one is ENQUEUED ON DEMAND, by `requestCrawl`
+     * when a person asks for a crawl — the first job in this repository that is
+     * not a recurring retention sweep.
+     *
+     * It is idempotent in the way the at-least-once queue requires, but not by
+     * deleting already-deleted rows like the three above: a second delivery
+     * finds the crawl already `running`, `claimCrawl` returns null, and the
+     * handler returns without doing the work twice.
+     */
+    name: RUN_CRAWL_JOB,
+    handler: runCrawlJob,
   },
 ];
 

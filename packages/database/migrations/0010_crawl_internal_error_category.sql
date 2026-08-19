@@ -1,0 +1,18 @@
+-- A crawl can fail because the RUN failed, not because a fetch did.
+--
+-- `crawls_failed_has_category` (migration 0008) refuses a failed crawl with no
+-- `failure_category`, and it is right to: a failure with no explanation is a
+-- state an operator cannot act on. But every existing member of
+-- `crawl_failure_category` describes what a FETCH did — a timeout, a TLS
+-- problem, a redirect limit, robots. None describes a lost database connection
+-- or a bug in the run itself.
+--
+-- Found by wiring the crawler to a worker for the first time (dev log 0036):
+-- the handler marked a crashed crawl `failed`, the CHECK refused the row, and
+-- the crawl was left claiming to be `running` forever. The two ways out were to
+-- borrow a fetch category — telling an operator a typed lie they would then act
+-- on — or to name the case honestly. This names it.
+--
+-- ADD VALUE is transaction-safe on PostgreSQL 12+ as long as the new value is
+-- not USED in the same transaction, which it is not here.
+ALTER TYPE "crawl_failure_category" ADD VALUE IF NOT EXISTS 'internal_error';
