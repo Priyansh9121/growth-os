@@ -28,7 +28,7 @@
  * @see docs/security/attribution-privacy.md
  */
 
-import type { SubmissionContext } from '@growth-os/contracts';
+import { landingPathOf, type SubmissionContext } from '@growth-os/contracts';
 
 const MAX_PATH = 512;
 const MAX_PARAM = 255;
@@ -38,26 +38,36 @@ const MAX_PARAM = 255;
  *
  * `/emergency-plumber?utm_source=google&email=sarah@x.test` → `/emergency-plumber`
  *
- * A value that cannot be parsed becomes null rather than being stored as-is:
- * an unparseable "path" is not a path, and keeping it would defeat the whole
- * point of this function.
+ * A value that is not shaped like a landing path becomes `undefined` rather
+ * than being stored as-is: an unparseable "path" is not a path, and keeping it
+ * would defeat the whole point of this function.
+ *
+ * ⚠️ THE SHAPE CHECK LIVES IN `landingPathOf`, NOT HERE, AND THAT IS THE FIX.
+ *
+ * This used to call `new URL()` directly and trust it to throw. It does not
+ * throw — it **resolves** almost any string against the base. Measured over 13
+ * inputs (dev log 0024, re-measured in 0025), this function and
+ * `splitLandingUrl` disagreed about 7, and this one was the permissive side:
+ * `::::` was stored as `/::::`, `javascript:alert(1)` as `alert(1)`,
+ * `mailto:a@b.test` as `a@b.test`. Every one landed in
+ * `acquisitions.landing_path`.
+ *
+ * There is now one definition of the question and two callers of it
+ * (ADR-0044). A property test asserts they still agree.
+ *
+ * ⚠️ A REFUSAL MUST NOT FAIL THE SUBMISSION. `undefined` means
+ * `sanitiseContext` omits the field and the acquisition is written without a
+ * landing path — a malformed referrer is ordinary traffic, not an error.
  */
 export function toPath(value: string | undefined): string | undefined {
   if (!value) return undefined;
 
-  const trimmed = value.trim();
-  if (trimmed.length === 0) return undefined;
+  const path = landingPathOf(value);
+  if (path === null) return undefined;
 
-  try {
-    // A relative path needs a base to parse against. The base is discarded.
-    const url = new URL(trimmed, 'https://placeholder.invalid');
-    const path = url.pathname;
-    // A bare `/` carries no attribution value and is noise on the record.
-    if (path === '/' || path.length === 0) return '/';
-    return path.slice(0, MAX_PATH);
-  } catch {
-    return undefined;
-  }
+  // A bare `/` carries no attribution value, but it is still the honest answer
+  // for a visitor who landed on the home page.
+  return path.slice(0, MAX_PATH);
 }
 
 /**
