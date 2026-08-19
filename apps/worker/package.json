@@ -11,8 +11,11 @@
   "dependencies": {
     "@growth-os/auth": "*",
     "@growth-os/contracts": "*",
+    "@growth-os/crawler": "*",
     "@growth-os/database": "*",
     "@growth-os/forms": "*",
+    "@growth-os/net": "*",
+    "@growth-os/sites": "*",
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {

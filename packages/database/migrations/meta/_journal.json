@@ -71,6 +71,13 @@
       "when": 1787032449222,
       "tag": "0009_frontier_url_check_and_skip_reasons",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787118849222,
+      "tag": "0010_crawl_internal_error_category",
+      "breakpoints": true
     }
   ]
 }

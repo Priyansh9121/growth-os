@@ -129,6 +129,43 @@ it would make the job look successful and strand the crawl.
 column's own docblock requires this: the value is shown to a customer, and
 `connect ETIMEDOUT 93.184.216.34:443` is neither actionable nor theirs to see.
 
+### ⚠️ This decision was written wrong, and the database corrected it
+
+The first version of this ADR said `failure_category` should be left **null**,
+reasoning that every member of `CRAWL_FAILURE_CATEGORIES` describes what a
+_fetch_ did and none means "the run threw", so borrowing one would be a typed
+lie.
+
+**Migration 0008's `crawls_failed_has_category` CHECK refused the row**, on the
+grounds recorded in its own comment: _"a crawl can fail with no explanation,
+which is exactly the state an operator cannot act on."_ The result was the
+failure this decision exists to prevent — the crawl stayed `running` forever,
+because the only write that would have marked it failed was rejected.
+
+The constraint was right and the reasoning was wrong. Both halves of the
+original argument were true — a null category is refused, AND borrowing a fetch
+category is a lie — which means the missing thing was the category itself.
+Migration 0010 adds `internal_error`. It is the only member that describes what
+**we** did rather than what a fetch did, and its docblock says so.
+
+This is §5's "limits live in the database" doing exactly what it is for: the
+constraint caught a design error that review had passed.
+
+### ⚠️ And a second correction: marking the failure is best-effort
+
+The failure write goes through the same database handle that may be the thing
+that just failed. Measured: with a connection dying mid-crawl, an unguarded
+`markCrawlFailed` threw its own error, which **replaced the original** — so the
+queue's `last_error` recorded the bookkeeping failure and the real cause was
+lost.
+
+The marking is therefore wrapped, and the original error always propagates.
+
+**The residual gap is stated rather than hidden:** when the database is
+genuinely gone, the crawl cannot be marked at all and is left `running`. The
+queue reaps stalled _jobs_ (`reclaimStalledJobs`); nothing reaps stalled
+_crawls_. That is a real gap and it needs its own brief.
+
 Because the handler is idempotent on `crawl_id` and the queue is at-least-once,
 a retry re-reads the row and re-runs from the frontier's current state rather
 than from the beginning.
