@@ -158,3 +158,4 @@ ADRs, docs, code.
 | [0043](ADR-0043-aspsessionid-prefix-match.md)               | One session parameter is matched by prefix, and only one     | Accepted |
 | [0044](ADR-0044-one-landing-path-normaliser.md)             | One definition of the landing path for a URL                 | Accepted |
 | [0045](ADR-0045-one-absolute-url-test.md)                   | One definition of "is this an http(s) location?"             | Accepted |
+| [0046](ADR-0046-field-target-bound.md)                      | A field target is bounded by the key it must name            | Accepted |
