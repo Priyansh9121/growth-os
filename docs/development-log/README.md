@@ -57,3 +57,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0025](0025-one-landing-path-normaliser.md)              | One landing-path normaliser, and a table seven short        | 2026-08-19 |
 | [0026](0026-one-absolute-url-test.md)                    | One absolute-URL test, and a fifth copy nobody counted      | 2026-08-19 |
 | [0027](0027-the-field-target-cap.md)                     | The field target cap, and a length check that gates nothing | 2026-08-19 |
+| [0028](0028-one-like-escaper.md)                         | One LIKE escaper, and a near-miss correcting 0018           | 2026-08-19 |

@@ -33,6 +33,7 @@ import {
 } from '@growth-os/contracts';
 import { schemaTables } from '@growth-os/database';
 import { displayName, normaliseEmail, normalisePhone } from '../identity/normalise';
+import { containsPattern } from '../shared/like';
 import { decodeCursor, sliceToPage } from '../shared/pagination';
 import {
   actorUserId,
@@ -318,7 +319,7 @@ export async function listContacts(
       // Substring match on name and the normalised identity columns. Full-text
       // search is the wrong tool for short identifiers — someone typing "sar"
       // or the last four digits of a phone number (ADR-0016 §3).
-      const term = `%${filters.query.replace(/[%_]/g, (match) => `\\${match}`)}%`;
+      const term = containsPattern(filters.query);
       const search = or(
         ilike(contacts.firstName, term),
         ilike(contacts.lastName, term),

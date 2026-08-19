@@ -35,7 +35,8 @@ import {
   type Database,
   type TestHarness,
 } from '@growth-os/database';
-import { createContact } from './contacts/service';
+import { createContact, listContacts } from './contacts/service';
+import { createCompany, listCompanies } from './companies/service';
 import { eraseContact, previewErasure, countTracesOf } from './contacts/erasure';
 import { mergeContacts, previewMerge, resolveMergeRedirect } from './contacts/merge';
 import { ingestAcquisition } from './ingestion/service';
@@ -431,6 +432,125 @@ describeIntegration('CRM lifecycle services', () => {
           value: 'Terrace at 12 Smith St',
         }),
       ).rejects.toThrow();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // LIKE pattern escaping
+  // -------------------------------------------------------------------------
+
+  /**
+   * ⚠️ ASSERTED AGAINST POSTGRES, NOT AGAINST THE PATTERN STRING.
+   *
+   * `like.test.ts` proves the escaper builds the string it means to. That is
+   * the weak property: what matters is which rows the database matches, and
+   * LIKE escape semantics are exactly the thing 0018 measured rather than
+   * reasoned about. These assertions would all have passed on a pattern that
+   * looks escaped and matches the wrong rows.
+   *
+   * Before the fix the three call sites escaped `%` and `_` but not `\\`, so a
+   * term containing a backslash mis-assigned every escape after it.
+   */
+  describe('search terms containing a backslash', () => {
+    it('⚠️ countTracesOf FINDS a contact whose name contains a backslash', async () => {
+      // The one that matters most. This helper is how the erasure suite proves
+      // data is gone; before the fix it returned 0 for this contact, which
+      // reads as "erasure verified" for a person still in the database.
+      const owner = contextFor('owner');
+      await createContact(owner, {
+        firstName: 'Sara\\Jones',
+        email: 'sara.jones@example.test',
+      });
+
+      expect(await countTracesOf(owner, 'Sara\\Jones')).toBeGreaterThan(0);
+    });
+
+    it('⚠️ countTracesOf does not report a contact that lacks the backslash', async () => {
+      // The other direction of the same defect. Before the fix `Sara\Jones`
+      // matched the stored value `SaraJones`, so the helper could report a
+      // trace of someone who was never there.
+      const owner = contextFor('owner');
+      await createContact(owner, {
+        firstName: 'SaraJones',
+        email: 'sarajones@example.test',
+      });
+
+      expect(await countTracesOf(owner, 'Sara\\Jones')).toBe(0);
+    });
+
+    it('keeps the trailing wildcard a wildcard when the term ends in a backslash', async () => {
+      // Dev log 0018's case: the old form produced `%a\%`, whose closing
+      // wildcard was consumed as an escaped literal `%`, so the pattern stopped
+      // being a substring search. A stored `Sara%` then matched a search for
+      // `a\`, which is a trace attributed to the wrong person.
+      const owner = contextFor('owner');
+      await createContact(owner, { firstName: 'Sara%', email: 'sara.pc@example.test' });
+
+      expect(await countTracesOf(owner, 'a\\')).toBe(0);
+    });
+
+    it('still finds the plain terms the erasure suite relies on', async () => {
+      // The negative control. If the fix had broken ordinary search, every
+      // assertion above could pass while the suite's real purpose regressed.
+      const owner = contextFor('owner');
+      await createContact(owner, {
+        firstName: 'Nadia',
+        lastName: 'Haddad',
+        email: 'nadia@example.test',
+        phone: '0412 987 654',
+      });
+
+      expect(await countTracesOf(owner, 'Nadia')).toBeGreaterThan(0);
+      expect(await countTracesOf(owner, 'Haddad')).toBeGreaterThan(0);
+      expect(await countTracesOf(owner, 'nadia@example.test')).toBeGreaterThan(0);
+    });
+
+    it('contact search finds and excludes a backslash name correctly', async () => {
+      const owner = contextFor('owner');
+      await createContact(owner, { firstName: 'Ana\\Ruiz', email: 'ana.ruiz@example.test' });
+      await createContact(owner, { firstName: 'AnaRuiz', email: 'anaruiz@example.test' });
+
+      const found = await listContacts(owner, {
+        query: 'Ana\\Ruiz',
+        limit: 25,
+        sort: 'createdAt',
+        direction: 'desc',
+      });
+      const names = found.items.map((item) => item.displayName);
+
+      expect(names).toContain('Ana\\Ruiz');
+      expect(names).not.toContain('AnaRuiz');
+    });
+
+    it('company search finds and excludes a backslash name correctly', async () => {
+      const owner = contextFor('owner');
+      await createCompany(owner, { name: 'Acme\\Co' });
+      await createCompany(owner, { name: 'AcmeCo' });
+
+      const found = await listCompanies(owner, { query: 'Acme\\Co', limit: 25 });
+      const names = found.items.map((item) => item.name);
+
+      expect(names).toContain('Acme\\Co');
+      expect(names).not.toContain('AcmeCo');
+    });
+
+    it('a percent or underscore in a term is still a literal, not a wildcard', async () => {
+      // The behaviour the old escaper got right. Proven here so the fix cannot
+      // trade one defect for the other.
+      const owner = contextFor('owner');
+      await createContact(owner, { firstName: 'Ten%Off', email: 'ten@example.test' });
+      await createContact(owner, { firstName: 'TenXOff', email: 'tenx@example.test' });
+
+      const found = await listContacts(owner, {
+        query: 'Ten%Off',
+        limit: 25,
+        sort: 'createdAt',
+        direction: 'desc',
+      });
+      const names = found.items.map((item) => item.displayName);
+
+      expect(names).toContain('Ten%Off');
+      expect(names).not.toContain('TenXOff');
     });
   });
 

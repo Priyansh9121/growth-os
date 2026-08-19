@@ -19,6 +19,7 @@ import type {
 import { NotFoundError } from '@growth-os/contracts';
 import { schemaTables } from '@growth-os/database';
 import { normalisePhone, normaliseWebsiteHost } from '../identity/normalise';
+import { containsPattern } from '../shared/like';
 import { decodeCursor, sliceToPage } from '../shared/pagination';
 import {
   actorUserId,
@@ -102,7 +103,7 @@ export async function listCompanies(
     const conditions: SQL[] = [tenantScope(companies, workspace), isNull(companies.deletedAt)];
 
     if (filters.query) {
-      const term = `%${filters.query.replace(/[%_]/g, (m) => `\\${m}`)}%`;
+      const term = containsPattern(filters.query);
       conditions.push(ilike(companies.name, term));
     }
 

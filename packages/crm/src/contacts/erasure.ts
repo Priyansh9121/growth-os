@@ -34,6 +34,7 @@ import {
 } from '@growth-os/contracts';
 import { AUDIT_EVENTS, schemaTables, writeAuditEvent } from '@growth-os/database';
 import { displayName } from '../identity/normalise';
+import { containsPattern } from '../shared/like';
 import {
   actorUserId,
   contextNow,
@@ -311,7 +312,7 @@ export async function listErasures(
 export async function countTracesOf(context: CrmContext, term: string): Promise<number> {
   requireCapability(context, 'workspace:crm:contacts:erase');
 
-  const pattern = `%${term.replace(/[%_]/g, (match) => `\\${match}`)}%`;
+  const pattern = containsPattern(term);
 
   return inTenant(context, async (tx, workspace) => {
     const [row] = await tx.execute<{ traces: number }>(sql`
