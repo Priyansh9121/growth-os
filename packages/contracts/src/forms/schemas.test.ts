@@ -133,3 +133,68 @@ describe('⚠️ fieldTarget — the regex is bounded, not merely the string', (
     expect(large / small).toBeLessThan(20);
   });
 });
+
+describe('⚠️ fieldKey — the same bounded-quantifier shape as fieldTarget', () => {
+  /**
+   * `fieldKey` paired `.max(48)` with an unbounded `*`, which is the shape
+   * ADR-0046 fixed on `fieldTarget` and dev logs 0027–0030 carried as a known
+   * remaining item. Same reasoning, same fix, asserted the same way.
+   */
+  const withKey = (key: string) => ({
+    fields: [{ key, type: 'text' as const, label: 'A', target: 'none' }],
+    settings: {},
+  });
+
+  it('accepts a key of exactly the permitted length and refuses one over', () => {
+    expect(formVersionConfigSchema.safeParse(withKey('a'.repeat(48))).success).toBe(true);
+    expect(formVersionConfigSchema.safeParse(withKey('a'.repeat(49))).success).toBe(false);
+  });
+
+  it.each([
+    ['a', 'the shortest legal key'],
+    ['a1', 'letters and digits'],
+    ['property_type', 'an ordinary key'],
+  ])('still accepts %j (%s)', (key) => {
+    expect(formVersionConfigSchema.safeParse(withKey(key)).success).toBe(true);
+  });
+
+  it('still refuses a malformed key of legal length — the shape check survived', () => {
+    for (const bad of ['1abc', 'Abc', 'a-b', 'a b', '_a', '']) {
+      expect(formVersionConfigSchema.safeParse(withKey(bad)).success, bad).toBe(false);
+    }
+  });
+
+  it('runs the pattern even though .max() has already failed', () => {
+    // Why the bounded quantifier is needed at all: zod v4 collects every issue,
+    // so the length check does not short-circuit the pattern.
+    const result = formVersionConfigSchema.safeParse(withKey('k'.repeat(200_000)));
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+
+    const codes = result.error.issues.map((issue) => issue.code);
+    expect(codes).toContain('too_big');
+    expect(codes).toContain('invalid_format');
+  });
+
+  it('costs the same on a 4 MB key as on a 4 KB one', () => {
+    // The strong property (§6). Measured while writing this (dev log 0031):
+    // 166.1x with `*`, 1.2x with `{0,47}`, for the same 1000x increase in
+    // input. The threshold sits an order of magnitude clear of both, so it
+    // fails if someone restores an unbounded quantifier and passes under
+    // ordinary CI noise.
+    const measure = (size: number, iterations: number): number => {
+      const value = withKey('k'.repeat(size));
+      const started = process.hrtime.bigint();
+      for (let i = 0; i < iterations; i++) formVersionConfigSchema.safeParse(value);
+      return Number(process.hrtime.bigint() - started) / iterations;
+    };
+
+    measure(4_000, 200); // warm the JIT
+
+    const small = measure(4_000, 500);
+    const large = measure(4_000_000, 50);
+
+    expect(large / small).toBeLessThan(20);
+  });
+});

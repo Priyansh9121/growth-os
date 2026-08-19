@@ -347,7 +347,15 @@ const customFieldKey = z
   .trim()
   .min(1)
   .max(CUSTOM_FIELD_KEY_MAX_LENGTH)
-  .regex(/^[a-z][a-z0-9_]*$/, 'Use lowercase letters, numbers and underscores.');
+  // ⚠️ BOUNDED QUANTIFIER, for the reason ADR-0046 records: `.max()` bounds
+  // what zod ACCEPTS and never what it EXAMINES, so a `*` here ran against a
+  // full 200,000-character key after the length check had already failed —
+  // 232x end to end for a 1000x increase in input. Anchored and finitely
+  // bounded, the cost stops depending on input length at all.
+  .regex(
+    new RegExp(`^[a-z][a-z0-9_]{0,${CUSTOM_FIELD_KEY_MAX_LENGTH - 1}}$`),
+    'Use lowercase letters, numbers and underscores.',
+  );
 
 export const createCustomFieldSchema = z
   .object({
