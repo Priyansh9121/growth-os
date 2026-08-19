@@ -35,9 +35,15 @@
  * @see docs/decisions/ADR-0031-site-verification.md
  */
 
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { ConflictError, type CrawlStatus, type CrawlTrigger } from '@growth-os/contracts';
-import { enqueue, schemaTables } from '@growth-os/database';
+import {
+  enqueue,
+  schemaTables,
+  withTenantTransaction,
+  type Database,
+  type TenantTransaction,
+} from '@growth-os/database';
 import {
   actorUserIdOrNull,
   contextNow,
@@ -48,7 +54,7 @@ import {
   type SitesContext,
 } from './context';
 
-const { crawls, sites } = schemaTables;
+const { crawlFrontier, crawls, sites, workspaces } = schemaTables;
 
 /**
  * The worker job that runs a crawl.
@@ -280,4 +286,178 @@ export async function claimCrawl(
     // not be able to tell them apart.
     return row ? toView(row) : null;
   });
+}
+
+// ---------------------------------------------------------------------------
+// Reaping crawls abandoned by a dead worker
+// ---------------------------------------------------------------------------
+
+/**
+ * A wall-clock ceiling on one HTTP exchange, from `@growth-os/net`'s
+ * `DEFAULT_TIMEOUTS.totalMs`.
+ *
+ * Duplicated as a number rather than imported, because importing it would make
+ * a *timeout* the input to a *staleness* decision and couple the two silently:
+ * a later session tuning the fetch timeout would move this threshold without
+ * knowing. Stated here, a change to either one shows up as a disagreement
+ * somebody has to resolve deliberately. Verified this session that
+ * `pages/fetch.ts` does not override it.
+ */
+const REQUEST_CEILING_MS = 30_000;
+
+/**
+ * Robots plus the sitemap walk, which `maxSitemaps = 50` bounds.
+ *
+ * 51 exchanges × 30 s ≈ 25.5 minutes, rounded up. This is the part of a crawl
+ * whose duration does not scale with `page_limit`.
+ */
+const DISCOVERY_SLACK_MS = 30 * 60 * 1000;
+
+/**
+ * When a crawl that started at `startedAt` can no longer be legitimately working.
+ *
+ * ⚠️ DERIVED, NEVER A CONSTANT, and the direction of the error is the point.
+ * A crawl fetches one page at a time under a hard 30 s per-exchange ceiling, so
+ * `page_limit × 30s` is a true upper bound on the page phase. A fixed threshold
+ * cannot be right in both directions: tight enough to catch a dead 10-page
+ * crawl promptly would reap a live 10,000-page one, and loose enough to be safe
+ * for the latter would hide the former for days.
+ *
+ * Reaping late costs an operator some confusion. Reaping early destroys a
+ * working crawl's record and writes a failure that never happened.
+ *
+ * @see docs/decisions/ADR-0055-reaping-abandoned-crawls.md
+ */
+export function crawlStaleAfter(startedAt: Date, pageLimit: number): Date {
+  return new Date(startedAt.getTime() + pageLimit * REQUEST_CEILING_MS + DISCOVERY_SLACK_MS);
+}
+
+/** What a reaper pass did, so the worker can log something true. */
+export interface ReapedCrawl {
+  readonly crawlId: string;
+  readonly workspaceId: string;
+  readonly siteId: string;
+  /** Frontier rows that were still queued or in flight when it was reaped. */
+  readonly frontierAbandoned: number;
+}
+
+/** Safe for a customer to read: no host, no query, no stack trace. */
+const REAPED_DETAIL = 'The crawl stopped responding and was marked failed automatically.';
+
+/**
+ * Mark crawls abandoned by a dead worker as failed, in one workspace.
+ *
+ * ⚠️ THE FRONTIER IS UPDATED BEFORE THE CRAWL, inside the same transaction.
+ * Both or neither: a crawl marked failed whose frontier still claims rows are
+ * in flight is the same half-written state this reaper exists to remove.
+ */
+async function reapWorkspace(
+  tx: TenantTransaction,
+  workspace: string,
+  now: Date,
+): Promise<ReapedCrawl[]> {
+  // ⚠️ `started_at` IS SAFE TO KEY ON. `crawls_running_has_started_at` makes it
+  // non-null for every row that is not `queued`, so the database guarantees the
+  // comparison below is never against null.
+  const stale = await tx
+    .select({
+      id: crawls.id,
+      siteId: crawls.siteId,
+      pageLimit: crawls.pageLimit,
+      startedAt: crawls.startedAt,
+    })
+    .from(crawls)
+    .where(and(tenantScope(crawls, workspace), eq(crawls.status, 'running')));
+
+  const reaped: ReapedCrawl[] = [];
+
+  for (const crawl of stale) {
+    // The threshold is per crawl, so it cannot be a SQL predicate shared by all
+    // of them without duplicating the derivation in two languages.
+    if (!crawl.startedAt || crawlStaleAfter(crawl.startedAt, crawl.pageLimit) > now) continue;
+
+    // ⚠️ `fetching` AND `queued`. `finishCrawl` only has to consider `queued`,
+    // because it runs when the loop has stopped claiming. A crawl killed
+    // mid-flight is precisely when a row is left claimed, and a row that says
+    // it is in flight with nothing flying it is this bug's frontier version.
+    const abandoned = await tx
+      .update(crawlFrontier)
+      .set({ state: 'skipped', skipReason: 'abandoned' })
+      .where(
+        and(
+          eq(crawlFrontier.crawlId, crawl.id),
+          inArray(crawlFrontier.state, ['queued', 'fetching']),
+        ),
+      )
+      .returning({ id: crawlFrontier.id });
+
+    // Conditional on `running` in SQL: another worker may have finished this
+    // crawl legitimately between the select above and here, and its answer wins.
+    const [row] = await tx
+      .update(crawls)
+      .set({
+        status: 'failed',
+        // Required by `crawls_failed_has_category`. `internal_error` is migration
+        // 0010's category for "the run itself broke" rather than a fetch.
+        failureCategory: 'internal_error',
+        // Required by `crawls_terminal_status_has_completed_at`.
+        completedAt: now,
+        failureDetail: REAPED_DETAIL,
+      })
+      .where(
+        and(eq(crawls.id, crawl.id), tenantScope(crawls, workspace), eq(crawls.status, 'running')),
+      )
+      .returning({ id: crawls.id });
+
+    if (row) {
+      reaped.push({
+        crawlId: crawl.id,
+        workspaceId: workspace,
+        siteId: crawl.siteId,
+        frontierAbandoned: abandoned.length,
+      });
+    }
+  }
+
+  return reaped;
+}
+
+/**
+ * Reap every crawl abandoned by a dead worker, across all workspaces.
+ *
+ * The counterpart to `reclaimStalledJobs` — and deliberately NOT the same
+ * shape, which is the finding ADR-0055 records.
+ *
+ * ⚠️ THE OBVIOUS IMPLEMENTATION UPDATES NOTHING, FOREVER.
+ * `reclaimStalledJobs` is one unscoped `UPDATE` over `jobs`, which has no
+ * row-level security. `crawls` and `crawl_frontier` are `ENABLE` **and**
+ * `FORCE`. Measured against the restricted role production connects as, a
+ * copied reaper affects **zero rows** — and so does the same statement inside
+ * `withUnscopedTransaction`, which leaves `app_current_workspace_id()` null so
+ * the tenant policy matches nothing. It would look exactly like a system with
+ * no stale crawls.
+ *
+ * So the sweep enumerates workspaces — untenanted, therefore readable — and
+ * opens one tenant transaction each. RLS is respected rather than escaped, and
+ * no role gains `BYPASSRLS`.
+ *
+ * ⚠️ COST, STATED RATHER THAN HIDDEN: this is O(workspaces) per pass, not
+ * O(stale crawls). Free at today's scale and untenable at ten thousand
+ * workspaces; ADR-0055 names the `SECURITY DEFINER` discovery query as the fix
+ * when that stops being true.
+ *
+ * @see docs/decisions/ADR-0055-reaping-abandoned-crawls.md
+ */
+export async function reapAbandonedCrawls(db: Database, now: Date): Promise<ReapedCrawl[]> {
+  const allWorkspaces = await db.select({ id: workspaces.id }).from(workspaces);
+
+  const reaped: ReapedCrawl[] = [];
+  for (const workspace of allWorkspaces) {
+    const inWorkspace = await withTenantTransaction(db, workspace.id, (tx) =>
+      reapWorkspace(tx, workspace.id, now),
+    );
+    reaped.push(...inWorkspace);
+  }
+
+  return reaped;
 }
