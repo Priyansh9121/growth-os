@@ -14,6 +14,7 @@
  * @see docs/decisions/ADR-0015-contact-identity-and-deduplication.md
  */
 
+import { httpUrlOf } from '@growth-os/contracts';
 import { parsePhoneNumberWithError, type CountryCode } from 'libphonenumber-js';
 
 /**
@@ -77,16 +78,11 @@ export function normalisePhone(phone: string | null | undefined, region: string)
 export function normaliseWebsiteHost(website: string | null | undefined): string | null {
   if (!website) return null;
 
-  const trimmed = website.trim();
-  if (trimmed.length === 0) return null;
+  const url = httpUrlOf(website);
+  if (url === null) return null;
 
-  try {
-    const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-    const host = new URL(withScheme).hostname.toLowerCase();
-    return host.startsWith('www.') ? host.slice(4) : host;
-  } catch {
-    return null;
-  }
+  const host = url.hostname.toLowerCase();
+  return host.startsWith('www.') ? host.slice(4) : host;
 }
 
 /**

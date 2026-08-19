@@ -25,6 +25,8 @@
  * public key resolving to exactly one workspace (ADR-0026 §5).
  */
 
+import { httpUrlOf } from '@growth-os/contracts';
+
 /**
  * Reduce a URL-ish string to a canonical origin.
  *
@@ -42,21 +44,16 @@ export function normaliseOrigin(input: string | null | undefined): string | null
   // It is a real value and it is not a site.
   if (trimmed === 'null') return null;
 
-  try {
-    const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-    const url = new URL(withScheme);
+  // `httpUrlOf` guarantees an http(s) URL with a non-empty hostname, asserted
+  // as a property in `http-url.test.ts` — so there is no empty-host case here.
+  const url = httpUrlOf(trimmed);
+  if (url === null) return null;
 
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-    if (url.hostname.length === 0) return null;
-
-    // `url.origin` already strips default ports, the path, the query and any
-    // credentials — the last of which matters, because
-    // `https://evil.test@abcplumbing.test` has hostname `abcplumbing.test`
-    // and would fool a naive string comparison.
-    return url.origin.toLowerCase();
-  } catch {
-    return null;
-  }
+  // `url.origin` already strips default ports, the path, the query and any
+  // credentials — the last of which matters, because
+  // `https://evil.test@abcplumbing.test` has hostname `abcplumbing.test`
+  // and would fool a naive string comparison.
+  return url.origin.toLowerCase();
 }
 
 /**
