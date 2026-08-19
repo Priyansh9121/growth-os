@@ -163,3 +163,4 @@ ADRs, docs, code.
 | [0048](ADR-0048-verification-body-ceiling.md)               | Verification states both body tiers, at the default ratio    | Accepted |
 | [0049](ADR-0049-limits-override-couples-the-body-tiers.md)  | A limits override supplies both body tiers or neither        | Accepted |
 | [0050](ADR-0050-sitemap-parsing.md)                         | Sitemap parsing: htmlparser2, and why truncation is safe     | Accepted |
+| [0051](ADR-0051-sitemap-fetch-is-fail-open.md)              | A sitemap that cannot be read fails OPEN, unlike robots.txt  | Accepted |

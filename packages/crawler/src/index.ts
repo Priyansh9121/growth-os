@@ -17,5 +17,7 @@ export * from './frontier/decide';
 export * from './frontier/frontier';
 export * from './robots/parse';
 export * from './robots/fetch';
+export * from './sitemap/parse';
+export * from './sitemap/fetch';
 export * from './urls/normalise';
 export * from './urls/scope';
