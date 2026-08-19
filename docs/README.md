@@ -16,9 +16,17 @@ implementation and a document disagree, that is a bug in one of them — file it
 | Asking "why is it like this?"        | [decisions/](decisions/) (ADRs)                                                                                       |
 | Reviewing security                   | [security/threat-model.md](security/threat-model.md)                                                                  |
 | Building UI                          | [design/design-system.md](design/design-system.md)                                                                    |
+| Asking "what exists right now?"      | [PROJECT-STATUS.md](PROJECT-STATUS.md) — measured, regenerated wholesale                                              |
 | Wondering what happened in a session | [development-log/](development-log/)                                                                                  |
 
 ## Directory guide
+
+### `PROJECT-STATUS.md`
+
+A single-page, measured answer to _what exists, what is tested, what is still
+open_. Every figure in it is produced by a command; it is **regenerated
+wholesale**, never patched, so no part of it can quietly go stale while the
+rest stays current.
 
 ### `product/`
 

@@ -64,3 +64,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0032](0032-the-sitemap-parser.md)                       | The sitemap parser, and a comment that shipped too early    | 2026-08-19 |
 | [0033](0033-sitemap-discovery-reaches-the-frontier.md)   | Sitemap discovery reaches the frontier                      | 2026-08-19 |
 | [0034](0034-the-crawl-run.md)                            | The crawl run, and a termination check that stops early     | 2026-08-19 |
+| [0035](0035-the-status-document.md)                      | The status document, and where the house style stops        | 2026-08-19 |
