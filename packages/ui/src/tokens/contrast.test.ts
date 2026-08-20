@@ -268,6 +268,14 @@ describe.each(GROWTH_THEMES)('%s theme contrast', (_name, tokens) => {
   });
 });
 
+/** Every explicit theme block in the file, by name and selector. */
+const THEME_SELECTORS: readonly [string, string][] = [
+  ['light', ":root[data-theme='light']"],
+  ['growth-bright', ":root[data-theme='growth-bright']"],
+  ['growth-dark', ":root[data-theme='growth-dark']"],
+  ['growth-warm', ":root[data-theme='growth-warm']"],
+];
+
 describe('token integrity', () => {
   const REQUIRED = [
     'color-canvas',
@@ -284,12 +292,7 @@ describe('token integrity', () => {
     'color-critical',
   ];
 
-  it.each([
-    ['light', ":root[data-theme='light']"],
-    ['growth-bright', ":root[data-theme='growth-bright']"],
-    ['growth-dark', ":root[data-theme='growth-dark']"],
-    ['growth-warm', ":root[data-theme='growth-warm']"],
-  ])('%s defines every semantic colour ITSELF', (_name, selector) => {
+  it.each(THEME_SELECTORS)('%s defines every semantic colour ITSELF', (_name, selector) => {
     // ⚠️ `ownTokens`, not the merged view. A theme that inherited a colour from
     // the dark base would pass a merged check while rendering a dark-theme
     // value on a light surface — which is precisely the bug this guards.
@@ -302,6 +305,59 @@ describe('token integrity', () => {
   it('the dark base defines every semantic colour', () => {
     for (const token of REQUIRED) {
       expect(darkTokens.has(token), `dark theme missing --${token}`).toBe(true);
+    }
+  });
+});
+
+/**
+ * ⚠️ THE CASCADE, WHICH EVERY OTHER TEST IN THIS FILE IS BLIND TO.
+ *
+ * Everything above reads token VALUES out of a block. That cannot catch a
+ * selector which silently overrides a whole block — and one did: the
+ * `prefers-color-scheme: light` guard was written `:root:not([data-theme='dark'])`,
+ * which has the same specificity as `:root[data-theme='growth-bright']` and sits
+ * later in the file. On any machine whose OS prefers light, all three Growth
+ * themes rendered as the plain Light theme and `growth-dark` rendered LIGHT.
+ *
+ * The whole suite was green throughout, because the values were right and only
+ * the cascade was wrong. Found by opening a browser (dev log 0040).
+ *
+ * A browser is the only place the real cascade can be observed, and the e2e
+ * suite is not in `verify:all`. So this pins the property statically, in the
+ * fast gate: a preference guard must key on the ABSENCE of `data-theme`, never
+ * on it not equalling one particular value.
+ */
+describe('⚠️ OS-preference guards cannot override an explicit theme', () => {
+  const guards = [...css.matchAll(/@media\s*\(prefers-color-scheme[^)]*\)\s*\{/g)].map((match) => {
+    const after = css.slice(match.index! + match[0].length);
+    // The first selector inside the media block.
+    return after.slice(0, after.indexOf('{')).trim();
+  });
+
+  it('there is at least one guard to check', () => {
+    // Otherwise the assertions below would vacuously pass after a refactor.
+    expect(guards.length).toBeGreaterThan(0);
+  });
+
+  it.each(guards)('`%s` keys on attribute absence, not on a value', (guard) => {
+    expect(guard).toContain(':not([data-theme]');
+    // The exact shape that broke three themes. `:not([data-theme='x'])` matches
+    // every OTHER theme, which is the opposite of what the block means.
+    expect(guard, 'a value-specific negation matches every other theme').not.toMatch(
+      /:not\(\[data-theme=['"]/,
+    );
+  });
+
+  it.each(THEME_SELECTORS)('%s is not overridden by an OS-preference guard', (_name, selector) => {
+    // Source order plus equal specificity is what did the damage, so assert the
+    // guard cannot match the theme at all rather than relying on ordering.
+    const themeValue = selector.match(/data-theme='([^']+)'/)![1]!;
+    for (const guard of guards) {
+      const negated = guard.match(/:not\(\[data-theme=['"]([^'"]+)['"]\]\)/)?.[1];
+      expect(
+        negated !== undefined && negated !== themeValue,
+        `the guard \`${guard}\` matches [data-theme='${themeValue}'] and would override it`,
+      ).toBe(false);
     }
   });
 });

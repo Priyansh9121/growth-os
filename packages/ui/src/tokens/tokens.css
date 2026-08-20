@@ -354,9 +354,31 @@
   --shadow-glow: 0 0 24px -6px oklch(0.52 0.128 55 / 0.3);
 }
 
-/* Respect the OS preference when the user has not made an explicit choice. */
+/* Respect the OS preference when the user has not made an explicit choice.
+   ⚠️ THE GUARD IS ATTRIBUTE-ABSENCE, NOT "NOT DARK", AND THE DIFFERENCE BROKE
+   THREE THEMES.
+
+   This read `:root:not([data-theme='dark'])`. That selector has specificity
+   (0,2,0) — identical to `:root[data-theme='growth-bright']` — and it sits
+   LATER in this file, so on any machine whose OS prefers light it overrode
+   every theme except `dark`. All three Growth palettes rendered as the plain
+   Light theme, and `growth-dark` rendered LIGHT.
+
+   It was harmless while `dark` and `light` were the only values, because the
+   one theme it wrongly matched was `light` and the values it imposed were
+   `light`'s own. The third theme is what made it a bug.
+
+   Measured in a real browser, not reasoned about: under
+   `prefers-color-scheme: dark` the Growth canvases resolved correctly
+   (`lab(3.5%)` for growth-dark); under `light` all three collapsed to
+   `lab(98.26%)`. See dev log 0040.
+
+   `:not([data-theme])` matches only when the attribute is ABSENT, which is what
+   "has not made an explicit choice" always meant. The root layout emits an
+   explicit `data-theme` on every response, so this block is dead code in the
+   app today and stays only for a future `auto` option (ADR-0056 Decision 2). */
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) {
+  :root:not([data-theme]) {
     --color-canvas: oklch(0.985 0.002 255);
     --color-surface-1: oklch(1 0 0);
     --color-surface-2: oklch(0.965 0.003 255);
@@ -411,8 +433,12 @@
     color-scheme: dark;
   }
 
+  /* Same attribute-absence guard as the token block above, for the same
+     reason: `:not([data-theme='dark'])` claimed every explicit theme that was
+     not dark, so `growth-dark` was handed `color-scheme: light` and rendered
+     its form controls and scrollbars light on a dark surface. */
   @media (prefers-color-scheme: light) {
-    :root:not([data-theme='dark']) {
+    :root:not([data-theme]) {
       color-scheme: light;
     }
   }
