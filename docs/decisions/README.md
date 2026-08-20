@@ -169,3 +169,4 @@ ADRs, docs, code.
 | [0054](ADR-0054-starting-a-crawl.md)                        | Starting a crawl: the verification gate, and where it lives        | Accepted |
 | [0055](ADR-0055-reaping-abandoned-crawls.md)                | Reaping abandoned crawls: per-tenant, budget-derived, labelled     | Accepted |
 | [0056](ADR-0056-user-theme-preference.md)                   | A per-account theme preference, and the light palette that existed | Accepted |
+| [0057](ADR-0057-growth-theme-palettes.md)                   | Three Growth palettes, and growth-bright becomes the default       | Accepted |

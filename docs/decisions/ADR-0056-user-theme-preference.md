@@ -1,7 +1,19 @@
 # ADR-0056 — A per-account theme preference, and the light palette that already existed
 
-**Status:** Accepted
+**Status:** Accepted · Decision 1's default superseded by
+[ADR-0057](ADR-0057-growth-theme-palettes.md)
 **Date:** 2026-08-20
+
+> ⚠️ **Scope of the supersession, 2026-08-20.** ADR-0057 changes **only** the
+> default value in Decision 1, from `dark` to `growth-bright`, and adds three
+> palettes. The mechanism in Decision 1 (a `NOT NULL` enum column on `users`),
+> and Decisions 2, 3 and 4 in full, are unchanged and remain in force. The body
+> below is untouched and was correct when written; read it for the reasoning,
+> and ADR-0057 for the current default.
+>
+> The status is qualified rather than a bare `Superseded by ADR-0057` because a
+> bare marker would tell a reader that server-side resolution and the `auto`
+> decision had also been reversed, which they have not.
 
 ## Context
 

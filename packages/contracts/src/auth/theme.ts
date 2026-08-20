@@ -29,17 +29,40 @@
 import { z } from 'zod';
 
 /**
- * ⚠️ ORDER IS NOT COSMETIC: `dark` is first because it is the DEFAULT, in the
- * column, in the schema below and in the layout's fallback. Every existing
- * account keeps exactly what it has today.
+ * ⚠️ ORDER IS THE ORDER THE SETTINGS PAGE RENDERS, so the default comes first
+ * and the quiet alternatives follow. It is NOT the database enum's order —
+ * PostgreSQL appends new values, so `theme_preference` is stored as
+ * `dark, light, growth-bright, growth-dark, growth-warm`. Nothing sorts on
+ * either, and a test asserts the two lists agree as SETS rather than sequences.
  */
-export const THEME_PREFERENCES = ['dark', 'light'] as const;
+export const THEME_PREFERENCES = [
+  'growth-bright',
+  'growth-dark',
+  'growth-warm',
+  'dark',
+  'light',
+] as const;
 export type ThemePreference = (typeof THEME_PREFERENCES)[number];
 
-/** The default for every existing and new account. Dark is unchanged. */
-export const DEFAULT_THEME_PREFERENCE: ThemePreference = 'dark';
+/**
+ * The default for accounts created from now on.
+ *
+ * ⚠️ THIS REVERSES ADR-0056's DEFAULT, DELIBERATELY (ADR-0057). It is the one
+ * place this change is not purely additive.
+ *
+ * It does NOT move anybody. `users.theme_preference` is `NOT NULL`, so every
+ * account that exists is stored with an explicit value — `dark` for anyone who
+ * never chose — and a column DEFAULT only applies to rows that omit it at
+ * INSERT. Verified on a throwaway database rather than reasoned about: a row
+ * written before the default changed still read `dark` afterwards, while a row
+ * written after read `growth-bright`.
+ */
+export const DEFAULT_THEME_PREFERENCE: ThemePreference = 'growth-bright';
 
 export const THEME_PREFERENCE_LABELS: Readonly<Record<ThemePreference, string>> = {
+  'growth-bright': 'Growth',
+  'growth-dark': 'Growth Dark',
+  'growth-warm': 'Growth Warm',
   dark: 'Dark',
   light: 'Light',
 };
@@ -50,11 +73,15 @@ export const THEME_PREFERENCE_LABELS: Readonly<Record<ThemePreference, string>> 
  * Descriptions rather than swatches alone: a theme picker whose only signal is
  * colour is unusable for anyone who cannot distinguish the swatches, which is
  * the same reason `docs/design/design-system.md` forbids colour-only series
- * identity in charts.
+ * identity in charts. With five options that stops being a nicety — "Growth"
+ * and "Growth Dark" are not tellable apart by name.
  */
 export const THEME_PREFERENCE_DESCRIPTIONS: Readonly<Record<ThemePreference, string>> = {
-  dark: 'The default. Cool graphite surfaces, tuned for long sessions.',
-  light: 'Bright surfaces with a deeper accent, tuned for well-lit rooms.',
+  'growth-bright': 'The default. Bright, with a confident green accent.',
+  'growth-dark': 'The same energy after dark — deep green surfaces, a glowing accent.',
+  'growth-warm': 'Amber rather than green. Warmer, and less like a trading terminal.',
+  dark: 'Quiet and neutral. Cool graphite surfaces, tuned for long sessions.',
+  light: 'Quiet and neutral. Bright surfaces with a deeper accent, for well-lit rooms.',
 };
 
 /** Parses a value from the wire. Anything else is refused, never defaulted. */

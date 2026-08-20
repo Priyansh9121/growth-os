@@ -42,13 +42,53 @@ describeIntegration('users.theme_preference', () => {
     return row!.id;
   }
 
-  it('⚠️ a user created without naming a theme gets dark', async () => {
-    // The compatibility guarantee. Every account that existed before this
-    // column keeps the appearance it had, because the DEFAULT backfilled them.
+  it('a user created without naming a theme gets the current default', async () => {
+    // ⚠️ THIS ASSERTED `dark` UNTIL ADR-0057 MOVED THE DEFAULT TO
+    // `growth-bright`. It is updated rather than deleted, and it is deliberately
+    // pinned to the literal as well as the constant: asserting only
+    // `DEFAULT_THEME_PREFERENCE` would pass even if the column default and the
+    // application constant had drifted apart, which is the one failure this is
+    // here to catch.
     const id = await newUser();
     const [row] = await harness.owner.select().from(users).where(eq(users.id, id));
-    expect(row?.themePreference).toBe('dark');
+    expect(row?.themePreference).toBe('growth-bright');
     expect(row?.themePreference).toBe(DEFAULT_THEME_PREFERENCE);
+  });
+
+  it('⚠️ CHANGING THE DEFAULT DOES NOT MOVE AN ACCOUNT THAT ALREADY EXISTS', async () => {
+    // The compatibility guarantee of ADR-0057, proven end to end against a real
+    // ALTER rather than argued from SQL semantics.
+    //
+    // A DEFAULT applies only to an INSERT that omits the column, and this
+    // column is NOT NULL — so everyone is stored explicitly. Someone on `dark`
+    // stays on `dark` when the product's default changes underneath them.
+    const existing = await newUser('already-here@example.test');
+    await harness.owner
+      .update(users)
+      .set({ themePreference: 'dark' })
+      .where(eq(users.id, existing));
+
+    // Move the default again, exactly as migration 0013 did.
+    await harness.owner.execute(
+      sql`ALTER TABLE users ALTER COLUMN theme_preference SET DEFAULT 'growth-warm'`,
+    );
+
+    try {
+      const created = await newUser('brand-new@example.test');
+
+      const [before] = await harness.owner.select().from(users).where(eq(users.id, existing));
+      const [after] = await harness.owner.select().from(users).where(eq(users.id, created));
+
+      expect(before?.themePreference, 'an existing account was re-themed').toBe('dark');
+      expect(after?.themePreference, 'a new account did not get the new default').toBe(
+        'growth-warm',
+      );
+    } finally {
+      // Leave the schema as the migrations left it, whatever happened above.
+      await harness.owner.execute(
+        sql`ALTER TABLE users ALTER COLUMN theme_preference SET DEFAULT 'growth-bright'`,
+      );
+    }
   });
 
   it('the column is NOT NULL, so no row can mean "no opinion"', async () => {
@@ -77,9 +117,27 @@ describeIntegration('users.theme_preference', () => {
       ),
     ).rejects.toThrow();
 
-    // And it is still whatever it was, not silently coerced.
+    // And it is still whatever it was, not silently coerced. Pinned to the
+    // constant rather than a literal: what this asserts is "unchanged", and
+    // hard-coding the default here made it fail for the wrong reason when
+    // ADR-0057 moved it.
     const [row] = await harness.owner.select().from(users).where(eq(users.id, id));
-    expect(row?.themePreference).toBe('dark');
+    expect(row?.themePreference).toBe(DEFAULT_THEME_PREFERENCE);
+  });
+
+  it('⚠️ refuses a theme that LOOKS like one of ours', async () => {
+    // `growth` and `growth-light` are the plausible typos now that three of the
+    // five values share a prefix. A near-miss must be refused exactly as hard
+    // as nonsense is.
+    const id = await newUser('typo@example.test');
+    for (const wrong of ['growth', 'growth-light', 'Growth-Bright', 'growthbright']) {
+      await expect(
+        harness.owner.execute(
+          sql`UPDATE users SET theme_preference = ${wrong} WHERE id = ${id}::uuid`,
+        ),
+        `${wrong} was accepted`,
+      ).rejects.toThrow();
+    }
   });
 
   it('the enum in the database is exactly the contracts list', async () => {
