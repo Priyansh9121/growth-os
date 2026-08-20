@@ -55,6 +55,19 @@ See §5.
 **Discipline:** the signal accent should cover ≲5% of a screen. If everything is
 highlighted, nothing is.
 
+⚠️ **One named exception: dashboard stat cards, under the Growth themes only**
+([ADR-0058](../decisions/ADR-0058-dashboard-accent-emphasis.md)). Each card
+carries a left accent stripe, and a metric value renders in the accent when it
+has a delta whose movement was genuinely good. Dev log 0040 found that the
+general discipline, applied to a data-dense dashboard, left the Growth palettes
+unable to deliver their own intent — the accent survived only in a nav pill and
+four small percentages.
+
+The exception is bounded, and the bound is what keeps it meaningful: a value
+with **no** delta is never emphasised, and neither is a bad movement. On the
+current dashboard that is 3 values of 10. Dark and Light do not opt in at all,
+and a test asserts they do not. The rule above is unchanged everywhere else.
+
 ### Data visualisation
 
 An ordered categorical sequence, chosen for distinguishability under both common
