@@ -16,7 +16,17 @@
  * @see docs/decisions/ADR-0005-multi-tenancy-model.md
  */
 
-import { index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { index, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { DEFAULT_THEME_PREFERENCE, THEME_PREFERENCES } from '@growth-os/contracts';
+
+/**
+ * Built from the contracts list, never re-typed here.
+ *
+ * The same reason every other enum in this schema is: a second copy would
+ * let the column and the settings form disagree about what a valid theme is,
+ * and the disagreement would only surface as a refused write in production.
+ */
+export const themePreferenceEnum = pgEnum('theme_preference', THEME_PREFERENCES);
 
 export const users = pgTable(
   'users',
@@ -58,6 +68,22 @@ export const users = pgTable(
     disabledAt: timestamp('disabled_at', { withTimezone: true }),
 
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+
+    /**
+     * Which palette this person sees.
+     *
+     * ⚠️ NOT NULL DEFAULT 'dark' — the compatibility guarantee, in the column
+     * rather than in the application. Every account that existed before this
+     * was added keeps exactly the appearance it had, and no read path has to
+     * decide what a null theme means.
+     *
+     * An enum, not text: the valid set is a database constraint (§5), so a typo
+     * in a future route is refused rather than stored and rendered as an
+     * unstyled page.
+     */
+    themePreference: themePreferenceEnum('theme_preference')
+      .notNull()
+      .default(DEFAULT_THEME_PREFERENCE),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

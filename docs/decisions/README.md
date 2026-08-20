@@ -135,36 +135,37 @@ ADRs, docs, code.
 
 ### Stage 3 — lead capture and attribution ingestion
 
-| ADR                                                         | Title                                                          | Status   |
-| ----------------------------------------------------------- | -------------------------------------------------------------- | -------- |
-| [0025](ADR-0025-system-actors.md)                           | System actors: capability grants without a user                | Accepted |
-| [0026](ADR-0026-public-form-resolution.md)                  | Resolving a public form to a tenant                            | Accepted |
-| [0027](ADR-0027-embed-mechanism.md)                         | Embed forms in an iframe, loaded by a tiny script              | Accepted |
-| [0028](ADR-0028-attribution-storage.md)                     | Browser attribution storage: sessionStorage only               | Accepted |
-| [0029](ADR-0029-web-properties.md)                          | `sites`: one shared web-property model                         | Accepted |
-| [0030](ADR-0030-worker-and-queue.md)                        | A PostgreSQL-backed worker, and no Redis yet                   | Accepted |
-| [0031](ADR-0031-site-verification.md)                       | Crawling requires proof of ownership                           | Accepted |
-| [0032](ADR-0032-crawler-network-security.md)                | One outbound HTTP client, SSRF defended structurally           | Accepted |
-| [0033](ADR-0033-url-normalisation.md)                       | One definition of "the same page"                              | Accepted |
-| [0034](ADR-0034-crawl-storage-model.md)                     | Page identity is separate from page facts                      | Accepted |
-| [0035](ADR-0035-robots-and-politeness.md)                   | Fail closed on unreadable robots.txt, and politeness           | Accepted |
-| [0036](ADR-0036-frontier-budget-and-ceiling.md)             | page_limit counts pages fetched, and the frontier ceiling      | Accepted |
-| [0037](ADR-0037-structural-verification-matching.md)        | Verification matches a parsed document, not a pattern          | Accepted |
-| [0038](ADR-0038-url-length-ceiling.md)                      | A URL over the admission ceiling has no crawl identity         | Accepted |
-| [0039](ADR-0039-robots-matcher-step-budget.md)              | A robots pattern too costly to evaluate is presumed matched    | Accepted |
-| [0040](ADR-0040-robots-fail-open-defects.md)                | Three ways the robots parser failed open                       | Accepted |
-| [0041](ADR-0041-query-identity-preserves-bytes.md)          | A query value is octets; normalising it must not decode        | Accepted |
-| [0042](ADR-0042-frontier-bound-and-precise-skip-reasons.md) | The frontier URL bound, and two skip reasons the enum lacked   | Accepted |
-| [0043](ADR-0043-aspsessionid-prefix-match.md)               | One session parameter is matched by prefix, and only one       | Accepted |
-| [0044](ADR-0044-one-landing-path-normaliser.md)             | One definition of the landing path for a URL                   | Accepted |
-| [0045](ADR-0045-one-absolute-url-test.md)                   | One definition of "is this an http(s) location?"               | Accepted |
-| [0046](ADR-0046-field-target-bound.md)                      | A field target is bounded by the key it must name              | Accepted |
-| [0047](ADR-0047-one-like-escaper.md)                        | One LIKE escaper, and the escape character is escaped first    | Accepted |
-| [0048](ADR-0048-verification-body-ceiling.md)               | Verification states both body tiers, at the default ratio      | Accepted |
-| [0049](ADR-0049-limits-override-couples-the-body-tiers.md)  | A limits override supplies both body tiers or neither          | Accepted |
-| [0050](ADR-0050-sitemap-parsing.md)                         | Sitemap parsing: htmlparser2, and why truncation is safe       | Accepted |
-| [0051](ADR-0051-sitemap-fetch-is-fail-open.md)              | A sitemap that cannot be read fails OPEN, unlike robots.txt    | Accepted |
-| [0052](ADR-0052-sitemap-walk-bounds.md)                     | Walking a sitemap tree: three bounds, one admission path       | Accepted |
-| [0053](ADR-0053-the-crawl-run.md)                           | One crawl run: robots, then sitemap, then pages                | Accepted |
-| [0054](ADR-0054-starting-a-crawl.md)                        | Starting a crawl: the verification gate, and where it lives    | Accepted |
-| [0055](ADR-0055-reaping-abandoned-crawls.md)                | Reaping abandoned crawls: per-tenant, budget-derived, labelled | Accepted |
+| ADR                                                         | Title                                                              | Status   |
+| ----------------------------------------------------------- | ------------------------------------------------------------------ | -------- |
+| [0025](ADR-0025-system-actors.md)                           | System actors: capability grants without a user                    | Accepted |
+| [0026](ADR-0026-public-form-resolution.md)                  | Resolving a public form to a tenant                                | Accepted |
+| [0027](ADR-0027-embed-mechanism.md)                         | Embed forms in an iframe, loaded by a tiny script                  | Accepted |
+| [0028](ADR-0028-attribution-storage.md)                     | Browser attribution storage: sessionStorage only                   | Accepted |
+| [0029](ADR-0029-web-properties.md)                          | `sites`: one shared web-property model                             | Accepted |
+| [0030](ADR-0030-worker-and-queue.md)                        | A PostgreSQL-backed worker, and no Redis yet                       | Accepted |
+| [0031](ADR-0031-site-verification.md)                       | Crawling requires proof of ownership                               | Accepted |
+| [0032](ADR-0032-crawler-network-security.md)                | One outbound HTTP client, SSRF defended structurally               | Accepted |
+| [0033](ADR-0033-url-normalisation.md)                       | One definition of "the same page"                                  | Accepted |
+| [0034](ADR-0034-crawl-storage-model.md)                     | Page identity is separate from page facts                          | Accepted |
+| [0035](ADR-0035-robots-and-politeness.md)                   | Fail closed on unreadable robots.txt, and politeness               | Accepted |
+| [0036](ADR-0036-frontier-budget-and-ceiling.md)             | page_limit counts pages fetched, and the frontier ceiling          | Accepted |
+| [0037](ADR-0037-structural-verification-matching.md)        | Verification matches a parsed document, not a pattern              | Accepted |
+| [0038](ADR-0038-url-length-ceiling.md)                      | A URL over the admission ceiling has no crawl identity             | Accepted |
+| [0039](ADR-0039-robots-matcher-step-budget.md)              | A robots pattern too costly to evaluate is presumed matched        | Accepted |
+| [0040](ADR-0040-robots-fail-open-defects.md)                | Three ways the robots parser failed open                           | Accepted |
+| [0041](ADR-0041-query-identity-preserves-bytes.md)          | A query value is octets; normalising it must not decode            | Accepted |
+| [0042](ADR-0042-frontier-bound-and-precise-skip-reasons.md) | The frontier URL bound, and two skip reasons the enum lacked       | Accepted |
+| [0043](ADR-0043-aspsessionid-prefix-match.md)               | One session parameter is matched by prefix, and only one           | Accepted |
+| [0044](ADR-0044-one-landing-path-normaliser.md)             | One definition of the landing path for a URL                       | Accepted |
+| [0045](ADR-0045-one-absolute-url-test.md)                   | One definition of "is this an http(s) location?"                   | Accepted |
+| [0046](ADR-0046-field-target-bound.md)                      | A field target is bounded by the key it must name                  | Accepted |
+| [0047](ADR-0047-one-like-escaper.md)                        | One LIKE escaper, and the escape character is escaped first        | Accepted |
+| [0048](ADR-0048-verification-body-ceiling.md)               | Verification states both body tiers, at the default ratio          | Accepted |
+| [0049](ADR-0049-limits-override-couples-the-body-tiers.md)  | A limits override supplies both body tiers or neither              | Accepted |
+| [0050](ADR-0050-sitemap-parsing.md)                         | Sitemap parsing: htmlparser2, and why truncation is safe           | Accepted |
+| [0051](ADR-0051-sitemap-fetch-is-fail-open.md)              | A sitemap that cannot be read fails OPEN, unlike robots.txt        | Accepted |
+| [0052](ADR-0052-sitemap-walk-bounds.md)                     | Walking a sitemap tree: three bounds, one admission path           | Accepted |
+| [0053](ADR-0053-the-crawl-run.md)                           | One crawl run: robots, then sitemap, then pages                    | Accepted |
+| [0054](ADR-0054-starting-a-crawl.md)                        | Starting a crawl: the verification gate, and where it lives        | Accepted |
+| [0055](ADR-0055-reaping-abandoned-crawls.md)                | Reaping abandoned crawls: per-tenant, budget-derived, labelled     | Accepted |
+| [0056](ADR-0056-user-theme-preference.md)                   | A per-account theme preference, and the light palette that existed | Accepted |
