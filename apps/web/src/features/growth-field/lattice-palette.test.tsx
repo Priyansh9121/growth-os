@@ -75,4 +75,32 @@ describe('readPalette', () => {
     }
     expect(palette.canvas).toContain('oklch');
   });
+
+  /**
+   * ⚠️ RE-VERIFIED FOR THE GROWTH PALETTES RATHER THAN ASSUMED.
+   *
+   * ADR-0056 §4 claimed the lattice follows any theme untouched. That was true
+   * of two themes; the brief that added three more asked for it to be checked
+   * again instead of inherited. It holds, and the reason is structural — the
+   * scene consumes four variable NAMES, and a theme is a redefinition of those
+   * names. Nothing about the count of themes can change that.
+   *
+   * The real values are lifted from `tokens.css` so this fails if a Growth
+   * theme ever stops defining one of the four the scene needs.
+   */
+  const GROWTH_CANVASES = [
+    ['growth-bright', 'oklch(0.981 0.009 133)', 'oklch(0.52 0.145 133)'],
+    ['growth-dark', 'oklch(0.155 0.019 140)', 'oklch(0.83 0.19 137)'],
+    ['growth-warm', 'oklch(0.982 0.012 78)', 'oklch(0.52 0.128 55)'],
+  ] as const;
+
+  it.each(GROWTH_CANVASES)('%s reaches the scene unmodified', (_theme, canvas, signal) => {
+    const element = elementWith({ '--color-canvas': canvas, '--color-signal': signal });
+    const palette = readPalette(element);
+
+    expect(palette.canvas).toBe(canvas);
+    expect(palette.signal).toBe(signal);
+    // Not the dark-theme fallback — which is what a hard-coded scene would give.
+    expect(palette.canvas).not.toBe('oklch(0.145 0.012 255)');
+  });
 });
