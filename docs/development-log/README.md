@@ -66,3 +66,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0034](0034-the-crawl-run.md)                            | The crawl run, and a termination check that stops early     | 2026-08-19 |
 | [0035](0035-the-status-document.md)                      | The status document, and where the house style stops        | 2026-08-19 |
 | [0036](0036-the-crawler-gets-a-caller.md)                | The crawler gets a caller, and a CHECK corrected the design | 2026-08-19 |
+| [0037](0037-the-crawl-reaper.md)                         | The crawl reaper, and a precedent that was a no-op          | 2026-08-20 |
