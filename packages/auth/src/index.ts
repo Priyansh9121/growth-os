@@ -14,3 +14,4 @@ export * from './http/index';
 export * from './login';
 export * from './invitations';
 export * from './password-reset';
+export * from './preferences';
