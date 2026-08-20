@@ -113,6 +113,14 @@ function themeTokens(selector: string): Map<string, [number, number, number]> {
   return new Map([...baseTokens, ...parseTokens(css.slice(open, close))]);
 }
 
+/** The raw text of one theme block, for assertions about what it declares. */
+function ownBlock(selector: string): string {
+  const start = css.indexOf(selector);
+  if (start === -1) throw new Error(`No block for ${selector} in tokens.css`);
+  const open = css.indexOf('{', start);
+  return css.slice(open, css.indexOf('\n}', open));
+}
+
 /** What a theme block defines ITSELF, for the integrity check. */
 function ownTokens(selector: string): Map<string, [number, number, number]> {
   const start = css.indexOf(selector);
@@ -268,6 +276,46 @@ describe.each(GROWTH_THEMES)('%s theme contrast', (_name, tokens) => {
   });
 });
 
+/**
+ * ⚠️ THE SOLID ACCENT FILL — every theme, and it had never been checked.
+ *
+ * `Button`'s primary variant is `bg-signal text-text-inverse`, which its own
+ * comment justifies on contrast grounds. Nothing verified it. It was also not
+ * even applying: `cn` was deleting the colour class (see `lib/cn.test.ts`), so
+ * the label rendered in `--color-text` at 1.47:1 in growth-dark and 2.83:1 in
+ * growth-bright.
+ *
+ * Both halves are now pinned — that the intended pair is readable, and that the
+ * pair actually reaching the DOM is the intended one.
+ */
+describe('the solid accent fill is readable in every theme', () => {
+  it.each([
+    ['dark', () => darkTokens],
+    ['light', () => lightTokens],
+    ['growth-bright', () => growthBrightTokens],
+    ['growth-dark', () => growthDarkTokens],
+    ['growth-warm', () => growthWarmTokens],
+  ])('%s: inverse text on the accent fill meets 4.5:1', (_name, get) => {
+    expect(ratio(get(), 'color-text-inverse', 'color-signal')).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each([
+    ['dark', () => darkTokens],
+    ['light', () => lightTokens],
+    ['growth-bright', () => growthBrightTokens],
+    ['growth-dark', () => growthDarkTokens],
+    ['growth-warm', () => growthWarmTokens],
+  ])('%s: the ORDINARY text colour on that fill would NOT be readable', (_name, get) => {
+    // The negative that gives the assertion above its meaning. If this ever
+    // passes, `text-text-inverse` has stopped being load-bearing and the
+    // measurement that motivated ADR-0058 no longer applies.
+    expect(
+      ratio(get(), 'color-text', 'color-signal'),
+      'ordinary text on the accent is now readable — re-check whether the inverse is still needed',
+    ).toBeLessThan(4.5);
+  });
+});
+
 /** Every explicit theme block in the file, by name and selector. */
 const THEME_SELECTORS: readonly [string, string][] = [
   ['light', ":root[data-theme='light']"],
@@ -359,5 +407,62 @@ describe('⚠️ OS-preference guards cannot override an explicit theme', () => 
         `the guard \`${guard}\` matches [data-theme='${themeValue}'] and would override it`,
       ).toBe(false);
     }
+  });
+});
+
+/**
+ * ⚠️ DARK AND LIGHT MUST NOT GAIN THE DASHBOARD'S ACCENT EMPHASIS.
+ *
+ * ADR-0057 keeps Dark and Light as the deliberately quiet option; ADR-0058
+ * spends more accent on dashboard stat cards and applies to the three Growth
+ * themes ONLY. That split is a promise about how the product looks, so it is
+ * asserted rather than left to whoever edits `tokens.css` next.
+ *
+ * The mechanism is two tokens, off in the base and on in the Growth blocks —
+ * no `theme === '…'` branch exists in any component, which is why this file can
+ * verify the whole rule.
+ */
+describe('accent emphasis is opt-in, and only the Growth themes opt in', () => {
+  const EMPHASIS = ['color-metric-emphasis', 'color-card-accent'];
+
+  it.each(EMPHASIS)('%s is declared in the base theme', (token) => {
+    // Declared centrally so a theme that says nothing inherits "off" rather
+    // than inheriting nothing and rendering an unset colour.
+    expect(css.slice(0, css.indexOf(":root[data-theme='light']"))).toContain(`--${token}:`);
+  });
+
+  it.each([
+    ['growth-bright', ":root[data-theme='growth-bright']"],
+    ['growth-dark', ":root[data-theme='growth-dark']"],
+    ['growth-warm', ":root[data-theme='growth-warm']"],
+  ])('%s turns emphasis ON', (_name, selector) => {
+    const own = ownBlock(selector);
+    for (const token of EMPHASIS) {
+      expect(own, `${_name} does not enable --${token}`).toContain(
+        `--${token}: var(--color-signal)`,
+      );
+    }
+  });
+
+  it.each([['light', ":root[data-theme='light']"]])(
+    '⚠️ %s does NOT turn emphasis on — its restraint is the point',
+    (_name, selector) => {
+      const own = ownBlock(selector);
+      for (const token of EMPHASIS) {
+        expect(
+          own,
+          `${_name} started emphasising the accent (ADR-0057 says it should not)`,
+        ).not.toContain(`--${token}`);
+      }
+    },
+  );
+
+  it('⚠️ the base (Dark) resolves emphasis to ordinary text, not to the accent', () => {
+    // Dark inherits the base declarations. If someone "helpfully" pointed the
+    // base at --color-signal, Dark would silently gain the Growth treatment —
+    // the exact change ADR-0057 says must not happen to it.
+    const base = css.slice(0, css.indexOf(":root[data-theme='light']"));
+    expect(base).toContain('--color-metric-emphasis: var(--color-text)');
+    expect(base).toContain('--color-card-accent: transparent');
   });
 });
