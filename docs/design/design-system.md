@@ -73,6 +73,39 @@ Defined in the same file under `:root[data-theme='light']` and
 not an inversion: hairlines darken, the accent darkens to hold ≥4.5:1 on white,
 and elevation moves from luminance steps to shadow.
 
+### The Growth themes
+
+Three further palettes, added after Dark and Light and sharing one intent: the
+product should read as **momentum**, not as a neutral instrument panel.
+
+| Theme           | `data-theme`    | Base                    | Accent         | Register                               |
+| --------------- | --------------- | ----------------------- | -------------- | -------------------------------------- |
+| **Growth**      | `growth-bright` | Light, faint green cast | Deep green     | Decisive, optimistic. **The default.** |
+| **Growth Dark** | `growth-dark`   | Dark, green cast        | Brighter green | The same energy after dark             |
+| **Growth Warm** | `growth-warm`   | Light, cream            | Amber          | Human rather than technical            |
+
+⚠️ **The hue is the whole distinction.** Dark and Light use hue **165**, a cool
+teal-mint that reads as _instrument_ and _telemetry_. The Growth palettes use
+**~133–140**, a leaf green that reads as _growth_ and _season_. Thirty degrees
+apart is a different idea, not a lighter version of the same one.
+
+`growth-dark` is deliberately not an inversion of `growth-bright`: its accent is
+_brighter_ and more saturated than plain Dark's, which is what makes it glow
+rather than merely be visible. `growth-warm` swaps green for amber because green
+says _"the chart is up"_ and amber says _"someone is looking after this"_ — for a
+plumber or a legal practice, a trading-terminal dashboard is the wrong
+reassurance.
+
+⚠️ **Every Growth accent is darker than its design sketch, and the numbers
+decided that.** The reviewed mid-green measured 3.2:1 on its own surface, below
+the body-text bar; it was dropped until it cleared 4.5:1. Exactly the trade the
+Light theme already made on its accent. All five themes are held to the same bar
+by `contrast.test.ts` — see [ADR-0057](../decisions/ADR-0057-growth-theme-palettes.md).
+
+Structure is unchanged: hairlines, the surface ladder, and elevation-by-shadow on
+light bases and by luminance steps on dark ones. These are palettes, not a new
+layout or shadow system.
+
 #### Choosing it
 
 Stage 4 added the switch. A person picks their theme at **System → Appearance**;
@@ -81,14 +114,20 @@ any device they sign in on, and the root layout resolves it on the SERVER and
 emits `data-theme` in the first byte of HTML. There is no flash of the wrong
 theme and no client-side theme script.
 
-**Dark remains the default and the primary design target.** The column is
-`NOT NULL DEFAULT 'dark'`, so every account that existed before the setting —
-and every new one — sees exactly what it saw before until someone chooses
-otherwise.
+**`growth-bright` is the default for accounts created from now on**, and Dark
+remains the primary design target for the neutral surfaces.
 
-⚠️ **The palette was not changed to add the switch.** Both palettes, their
-contrast tests and this section predate it; what was missing was any way to
-reach the light one, because the root layout hardcoded `data-theme="dark"`.
+⚠️ **Changing the default moved nobody.** The column is `NOT NULL`, so every
+account that already existed is stored with an explicit value — `dark` for
+anyone who never opened the settings page — and a `DEFAULT` applies only to an
+`INSERT` that omits the column. Nothing distinguishes _"chose dark"_ from
+_"never chose"_, so a backfill would silently re-theme people who had actually
+picked dark. [ADR-0057](../decisions/ADR-0057-growth-theme-palettes.md) records
+leaving them as the deliberate choice.
+
+⚠️ **Dark and Light were not touched when the Growth palettes arrived.** Their
+tokens, their contrast tests and their section above are exactly as they were;
+the Growth themes sit beside them as additional blocks.
 
 ⚠️ **`prefers-color-scheme` is currently dead code.** The layout now always
 emits an explicit `data-theme`, and the media block is written as
@@ -104,8 +143,9 @@ by construction — the theme redefines colour and shadow only.
 
 **The WebGL lattice follows the theme with no code of its own.** `readPalette`
 reads `--color-signal`, `--color-signal-dim`, `--color-attention` and
-`--color-canvas` from `getComputedStyle` at runtime, and the light theme
-redefines all four. That is asserted by
+`--color-canvas` from `getComputedStyle` at runtime, and every theme redefines
+all four — re-verified against the three Growth palettes rather than inherited
+from when there were two. That is asserted by
 [`lattice-palette.test.tsx`](../../apps/web/src/features/growth-field/lattice-palette.test.tsx),
 so a hard-coded hex added to the scene later fails the build rather than quietly
 pinning it to one theme.
