@@ -86,11 +86,46 @@ function contrastRatio(
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-const darkTokens = parseTokens(css);
+// The `@theme` block — the dark theme, and the base every other theme layers on.
+const baseTokens = parseTokens(css.slice(0, css.indexOf(":root[data-theme='light']")));
 
-// The light theme is defined after the dark one, so parse from that point on.
-const lightBlockStart = css.indexOf(":root[data-theme='light']");
-const lightTokens = parseTokens(css.slice(lightBlockStart));
+/**
+ * The tokens in force for one theme: the `@theme` base, overridden by that
+ * theme's own block.
+ *
+ * ⚠️ THE BLOCK IS EXTRACTED EXACTLY, NOT SLICED TO END-OF-FILE.
+ * This read `css.slice(blockStart)` and relied on first-definition-wins, which
+ * worked only while the light theme was the LAST block in the file. With five
+ * themes that approach silently attributes a later theme's tokens to an earlier
+ * one — every theme would appear to define every token, and the integrity test
+ * below could never fail again. Reading to the block's closing brace is what
+ * keeps it a real check.
+ */
+function themeTokens(selector: string): Map<string, [number, number, number]> {
+  const start = css.indexOf(selector);
+  if (start === -1) throw new Error(`No block for ${selector} in tokens.css`);
+  const open = css.indexOf('{', start);
+  const close = css.indexOf('\n}', open);
+  if (open === -1 || close === -1) throw new Error(`Unterminated block for ${selector}`);
+
+  // A theme block OVERRIDES the base; anything it does not name is inherited,
+  // which is exactly what the cascade does at runtime.
+  return new Map([...baseTokens, ...parseTokens(css.slice(open, close))]);
+}
+
+/** What a theme block defines ITSELF, for the integrity check. */
+function ownTokens(selector: string): Map<string, [number, number, number]> {
+  const start = css.indexOf(selector);
+  const open = css.indexOf('{', start);
+  const close = css.indexOf('\n}', open);
+  return parseTokens(css.slice(open, close));
+}
+
+const darkTokens = baseTokens;
+const lightTokens = themeTokens(":root[data-theme='light']");
+const growthBrightTokens = themeTokens(":root[data-theme='growth-bright']");
+const growthDarkTokens = themeTokens(":root[data-theme='growth-dark']");
+const growthWarmTokens = themeTokens(":root[data-theme='growth-warm']");
 
 function ratio(tokens: Map<string, [number, number, number]>, fg: string, bg: string): number {
   const foreground = tokens.get(fg);
@@ -166,29 +201,107 @@ describe('light theme contrast', () => {
   });
 });
 
-describe('token integrity', () => {
-  it('defines every semantic colour in both themes', () => {
-    // A token present in one theme and missing in the other renders as
-    // `unset` — usually black on black — and only in the theme nobody
-    // developed in.
-    const required = [
-      'color-canvas',
-      'color-surface-1',
-      'color-surface-2',
-      'color-surface-3',
-      'color-line',
-      'color-line-strong',
-      'color-text',
-      'color-text-muted',
-      'color-text-subtle',
-      'color-signal',
-      'color-attention',
-      'color-critical',
-    ];
+/**
+ * The three Growth palettes, held to exactly the bar the two above already
+ * meet — no stricter, no looser.
+ *
+ * ⚠️ THESE WERE DESIGNED AGAINST THIS GATE, NOT CHECKED AFTERWARDS. Every
+ * accent here was chosen by computing the ratio first: the reviewed sketch's
+ * mid-green measured 3.2:1 on its own surface and was darkened until it
+ * cleared 4.5:1, which is the same trade the light theme made.
+ *
+ * @see docs/decisions/ADR-0057-growth-theme-palettes.md
+ */
+const GROWTH_THEMES: readonly [string, Map<string, [number, number, number]>][] = [
+  ['growth-bright', growthBrightTokens],
+  ['growth-dark', growthDarkTokens],
+  ['growth-warm', growthWarmTokens],
+];
 
-    for (const token of required) {
+describe.each(GROWTH_THEMES)('%s theme contrast', (_name, tokens) => {
+  it.each([
+    ['color-text', 'color-canvas'],
+    ['color-text', 'color-surface-1'],
+    ['color-text', 'color-surface-2'],
+    ['color-text', 'color-surface-3'],
+  ])('%s on %s meets 4.5:1 for body text', (foreground, background) => {
+    expect(ratio(tokens, foreground, background)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each([
+    ['color-text-muted', 'color-canvas'],
+    ['color-text-muted', 'color-surface-1'],
+    ['color-text-muted', 'color-surface-2'],
+  ])('%s on %s meets 4.5:1 — secondary text is still text', (foreground, background) => {
+    expect(ratio(tokens, foreground, background)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('the accent holds 4.5:1 on the canvas and on surface-1', () => {
+    // An energetic palette that cannot be read is not a usable palette. This
+    // is the assertion that forced every Growth accent darker than its sketch.
+    expect(ratio(tokens, 'color-signal', 'color-canvas')).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(tokens, 'color-signal', 'color-surface-1')).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('status colours meet 4.5:1 on surfaces', () => {
+    expect(ratio(tokens, 'color-attention', 'color-surface-1')).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(tokens, 'color-critical', 'color-surface-1')).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('the focus ring meets 3:1 against the canvas', () => {
+    expect(ratio(tokens, 'color-signal', 'color-canvas')).toBeGreaterThanOrEqual(3);
+  });
+
+  it('tertiary text meets 3:1 (large/incidental use only)', () => {
+    expect(ratio(tokens, 'color-text-subtle', 'color-canvas')).toBeGreaterThanOrEqual(3);
+  });
+
+  it('⚠️ the accent is distinguishable from the status colours', () => {
+    // Specific to these palettes and not inherited from the two above. In a
+    // warm theme the accent and `attention` are drawn from the same family, so
+    // "this is working" and "look at this" can collapse into one colour. A
+    // status colour indistinguishable from the accent is not a status colour.
+    const signal = tokens.get('color-signal')!;
+    const attention = tokens.get('color-attention')!;
+    const hueGap = Math.abs(signal[2] - attention[2]);
+    expect(Math.min(hueGap, 360 - hueGap), 'signal and attention share a hue').toBeGreaterThan(20);
+  });
+});
+
+describe('token integrity', () => {
+  const REQUIRED = [
+    'color-canvas',
+    'color-surface-1',
+    'color-surface-2',
+    'color-surface-3',
+    'color-line',
+    'color-line-strong',
+    'color-text',
+    'color-text-muted',
+    'color-text-subtle',
+    'color-signal',
+    'color-attention',
+    'color-critical',
+  ];
+
+  it.each([
+    ['light', ":root[data-theme='light']"],
+    ['growth-bright', ":root[data-theme='growth-bright']"],
+    ['growth-dark', ":root[data-theme='growth-dark']"],
+    ['growth-warm', ":root[data-theme='growth-warm']"],
+  ])('%s defines every semantic colour ITSELF', (_name, selector) => {
+    // ⚠️ `ownTokens`, not the merged view. A theme that inherited a colour from
+    // the dark base would pass a merged check while rendering a dark-theme
+    // value on a light surface — which is precisely the bug this guards.
+    const own = ownTokens(selector);
+    for (const token of REQUIRED) {
+      expect(own.has(token), `${_name} does not define --${token}`).toBe(true);
+    }
+  });
+
+  it('the dark base defines every semantic colour', () => {
+    for (const token of REQUIRED) {
       expect(darkTokens.has(token), `dark theme missing --${token}`).toBe(true);
-      expect(lightTokens.has(token), `light theme missing --${token}`).toBe(true);
     }
   });
 });
