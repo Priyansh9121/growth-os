@@ -73,6 +73,50 @@ Defined in the same file under `:root[data-theme='light']` and
 not an inversion: hairlines darken, the accent darkens to hold ≥4.5:1 on white,
 and elevation moves from luminance steps to shadow.
 
+#### Choosing it
+
+Stage 4 added the switch. A person picks their theme at **System → Appearance**;
+it is stored on their account (`users.theme_preference`), so it follows them to
+any device they sign in on, and the root layout resolves it on the SERVER and
+emits `data-theme` in the first byte of HTML. There is no flash of the wrong
+theme and no client-side theme script.
+
+**Dark remains the default and the primary design target.** The column is
+`NOT NULL DEFAULT 'dark'`, so every account that existed before the setting —
+and every new one — sees exactly what it saw before until someone chooses
+otherwise.
+
+⚠️ **The palette was not changed to add the switch.** Both palettes, their
+contrast tests and this section predate it; what was missing was any way to
+reach the light one, because the root layout hardcoded `data-theme="dark"`.
+
+⚠️ **`prefers-color-scheme` is currently dead code.** The layout now always
+emits an explicit `data-theme`, and the media block is written as
+`:root:not([data-theme='dark'])`. It is kept rather than deleted because it
+becomes live the moment an `auto` option is added — one enum value and one radio
+button. See [ADR-0056](../decisions/ADR-0056-user-theme-preference.md) for why
+`auto` was not shipped now.
+
+#### What the theme does NOT change
+
+Layout, typography, spacing, radius and every motion token are theme-independent
+by construction — the theme redefines colour and shadow only.
+
+**The WebGL lattice follows the theme with no code of its own.** `readPalette`
+reads `--color-signal`, `--color-signal-dim`, `--color-attention` and
+`--color-canvas` from `getComputedStyle` at runtime, and the light theme
+redefines all four. That is asserted by
+[`lattice-palette.test.tsx`](../../apps/web/src/features/growth-field/lattice-palette.test.tsx),
+so a hard-coded hex added to the scene later fails the build rather than quietly
+pinning it to one theme.
+
+⚠️ One caveat, recorded rather than left to be discovered: the scene reads the
+palette **once**, in a `useMemo` with an empty dependency list. A theme change
+while it is mounted would not repaint it. That cannot happen today — the scene
+renders nothing once the login transition completes, so it exists only before
+authentication while the setting exists only after it. If the lattice is ever
+shown on an authenticated surface, that memo becomes a bug.
+
 ### Contrast commitments
 
 | Pair                                                      | Minimum                                       |
