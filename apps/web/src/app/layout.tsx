@@ -59,8 +59,12 @@ export const dynamic = 'force-dynamic';
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // ⚠️ RESOLVED ON THE SERVER, so the correct attribute is in the first byte of
-  // HTML and no wrong-theme frame is ever painted. Dark for a signed-out
-  // visitor, which is what every visitor saw before this existed.
+  // HTML and no wrong-theme frame is ever painted. Confirmed in a real browser
+  // (dev log 0040): the raw HTML carries `data-theme` before any stylesheet.
+  //
+  // A signed-out visitor gets DEFAULT_THEME_PREFERENCE — `growth-bright` since
+  // ADR-0057, not dark. This comment said "dark" until that was observed on the
+  // rendered login page.
   const theme = await resolveRequestTheme();
 
   return (

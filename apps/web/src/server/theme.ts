@@ -42,7 +42,9 @@ import { getDependencies } from './dependencies';
  * apply and the answer is the default, exactly as before this existed.
  *
  * Never throws. A failure here must not take down a page: a database that
- * cannot answer a colour question still renders, in dark.
+ * cannot answer a colour question still renders, in the default theme —
+ * `growth-bright` since ADR-0057. This said "in dark" until the rendered login
+ * page was observed (dev log 0040).
  */
 export async function resolveRequestTheme(): Promise<ThemePreference> {
   try {
