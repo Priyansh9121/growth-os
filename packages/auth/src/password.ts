@@ -66,15 +66,46 @@ const ARGON2_OPTIONS = {
  *
  * Generated at module load so the value is never a constant an attacker could
  * recognise, and so no plaintext password is embedded in the source.
+ *
+ * ⚠️ IT IS STARTED AT MODULE LOAD, NOT ON FIRST USE — and it used to say so
+ * while doing the opposite. `dummyHashPromise ??= hash(...)` inside the getter
+ * meant the FIRST `verifyPasswordDummy` of a process paid for a hash AND a
+ * verify, while `verifyPassword` paid for a verify alone. Measured across eight
+ * fresh processes: the first call ran at 1.68–2.35× a real verification
+ * (mean 2.07), and every subsequent call at 0.79–1.11×.
+ *
+ * That is a timing difference between "no such user" and "wrong password" on
+ * the first login after a boot, which is the exact signal this constant exists
+ * to erase. It is in the SAFE direction — unknown-email is slower, not faster,
+ * so it does not hand an attacker the enumeration oracle — and it affects one
+ * request per process, so the practical risk was low. It was still the opposite
+ * of what the paragraph above promised, and it was what made
+ * `password.test.ts`'s timing assertion flaky: the test compared a hash+verify
+ * against a verify and allowed 4×, leaving only 2× of headroom for noise.
+ *
+ * Starting it here costs nothing on the request path. `hash` runs on argon2's
+ * own threadpool, so import returns immediately and the work completes long
+ * before a first login arrives.
+ *
+ * @see docs/development-log/0044-two-flakes.md
  */
-let dummyHashPromise: Promise<string> | null = null;
-
-function getDummyHash(): Promise<string> {
-  dummyHashPromise ??= hash(
+function startDummyHash(): Promise<string> {
+  return hash(
     // 32 random bytes; the plaintext is discarded and never needed again.
     Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64'),
     ARGON2_OPTIONS,
   );
+}
+
+const dummyHashPromise: Promise<string> = startDummyHash();
+
+// A rejection here must not become an unhandled rejection that takes down the
+// process at import time. The failure is re-raised at the call site instead,
+// where `verifyPassword` already treats an unusable hash as "authentication
+// failed" rather than as a 500.
+dummyHashPromise.catch(() => undefined);
+
+function getDummyHash(): Promise<string> {
   return dummyHashPromise;
 }
 
