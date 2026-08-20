@@ -44,11 +44,45 @@ const DELTA_CLASSES: Record<'good' | 'bad' | 'neutral', string> = {
   neutral: 'text-text-subtle',
 };
 
+/**
+ * The left accent stripe.
+ *
+ * ⚠️ IT IS A TOKEN, NOT A THEME CHECK. `--color-card-accent` is `transparent`
+ * in the base theme and the accent colour in the three Growth themes, so this
+ * one class is a visible stripe under Growth and nothing at all under Dark and
+ * Light — with no `theme === '…'` branch in any component (ADR-0058).
+ *
+ * `border-l-2` is applied unconditionally so the card's box model is identical
+ * in every theme: a stripe that changed the layout would move the content when
+ * someone switched theme.
+ */
+const CARD_ACCENT = 'border-l-2 border-l-card-accent';
+
+/**
+ * Does this value earn the accent?
+ *
+ * ⚠️ ONLY A MEASURED, GENUINELY-GOOD MOVEMENT. A metric with no delta —
+ * "New contacts: 8" — has no direction and therefore no judgement to render, so
+ * it stays text-coloured. Colouring it would mark a number for merely existing,
+ * which is exactly the failure the ~5% discipline names: if everything is
+ * highlighted, nothing is.
+ *
+ * `unavailable` is excluded because "Not connected" is not a good result.
+ */
+function valueEarnsAccent(metric: MetricValue): boolean {
+  if (metric.provenance === 'unavailable' || !metric.delta) return false;
+  return deltaTone(metric.delta.direction, metric.polarity) === 'good';
+}
+
+/** Emphasis colour when earned; the ordinary text colour otherwise. */
+const valueClass = (metric: MetricValue): string =>
+  valueEarnsAccent(metric) ? 'text-metric-emphasis' : 'text-text';
+
 export function MetricCard({ metric }: { metric: MetricValue }) {
   const unavailable = metric.provenance === 'unavailable';
 
   return (
-    <Surface level={1} className="flex flex-col gap-2.5 p-4">
+    <Surface level={1} className={`flex flex-col gap-2.5 p-4 ${CARD_ACCENT}`}>
       <div className="flex items-start justify-between gap-2">
         <span className="text-caption text-text-muted">{metric.label}</span>
         <ProvenanceBadge provenance={metric.provenance} />
@@ -58,7 +92,7 @@ export function MetricCard({ metric }: { metric: MetricValue }) {
         <span
           className={[
             'font-mono text-metric tracking-tight tabular-nums',
-            unavailable ? 'text-metric-sm text-text-subtle' : 'text-text',
+            unavailable ? 'text-metric-sm text-text-subtle' : valueClass(metric),
           ].join(' ')}
         >
           {metric.formatted}
@@ -102,14 +136,16 @@ export function ProvenanceBadge({ provenance }: { provenance: MetricValue['prove
 /** The single headline metric. One primary answer per screen. */
 export function HeadlineMetric({ metric }: { metric: MetricValue }) {
   return (
-    <Surface level={1} className="flex flex-col gap-3 p-6">
+    <Surface level={1} className={`flex flex-col gap-3 p-6 ${CARD_ACCENT}`}>
       <div className="flex items-center gap-2.5">
         <h2 className="text-caption text-text-muted">{metric.label}</h2>
         <ProvenanceBadge provenance={metric.provenance} />
       </div>
 
       <div className="flex items-baseline gap-3">
-        <span className="font-mono text-metric-lg tracking-tight text-text tabular-nums">
+        <span
+          className={`font-mono text-metric-lg tracking-tight tabular-nums ${valueClass(metric)}`}
+        >
           {metric.formatted}
         </span>
         {metric.unit === 'score' ? (
