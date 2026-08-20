@@ -16,6 +16,7 @@
  */
 
 import { closeDatabase, getDatabase } from '@growth-os/database';
+import { reapAbandonedCrawls } from '@growth-os/sites';
 import { JOBS, JOB_HANDLERS } from './jobs';
 import { claimJobs, completeJob, failJob, reclaimStalledJobs, scheduleRecurring } from './queue';
 
@@ -30,13 +31,31 @@ const db = getDatabase();
 let running = true;
 
 /**
- * One pass: reclaim, schedule, drain.
+ * One pass: reclaim jobs, reap abandoned crawls, schedule, drain.
  *
  * Returns how many jobs ran, so the loop can sleep when idle rather than
  * spinning — and so `--once` can report something useful.
  */
 export async function runOnce(now = new Date()): Promise<number> {
   await reclaimStalledJobs(db, new Date(now.getTime() - STALLED_MS));
+
+  // ⚠️ THE CRAWL REAPER IS SEPARATE FROM THE JOB REAPER, NOT A SPECIAL CASE OF
+  // IT. A stalled JOB is returned to `pending` and runs again, because handlers
+  // are idempotent. A stalled CRAWL cannot be: its worker may have died holding
+  // a database connection, leaving the row `running` with nothing coming to
+  // finish it, and re-running is a product decision rather than a retry
+  // (ADR-0055). It also takes no threshold argument — the staleness bound is
+  // derived per crawl from that crawl's own page budget, since a crawl
+  // legitimately runs for hours where a retention job runs for milliseconds.
+  const reaped = await reapAbandonedCrawls(db, now);
+  if (reaped.length > 0) {
+    // Identifiers only. A log line is a fan-out surface like an event.
+    console.warn('[worker] reaped abandoned crawls', {
+      count: reaped.length,
+      crawls: reaped.map((crawl) => crawl.crawlId),
+    });
+  }
+
   await scheduleRecurring(db, JOBS, now);
 
   const claimed = await claimJobs(db, BATCH, now);

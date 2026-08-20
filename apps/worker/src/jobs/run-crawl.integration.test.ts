@@ -31,6 +31,7 @@ import type { SafeFetchDependencies } from '@growth-os/net';
 import {
   createSite,
   getCrawl,
+  reapAbandonedCrawls,
   requestCrawl,
   RUN_CRAWL_JOB,
   type SitesContext,
@@ -424,9 +425,67 @@ describeIntegration('start a crawl, run it, read the result', () => {
         ),
       ).rejects.toThrow(/connection terminated/);
 
-      // Honest about the gap: the row IS left running, because nothing could
-      // write to it. Named in dev log 0036 rather than asserted away.
+      // The row IS left running at this instant, because nothing could write to
+      // it — recording a failure needs the database, and the database is what
+      // failed. That was the gap dev log 0036 named; the test below closes it.
       expect((await getCrawl(contextFor('owner'), crawlId)).status).toBe('running');
+    });
+
+    it('⚠️ AND THE REAPER CLOSES IT: the stranded crawl ends up failed', async () => {
+      // The exact scenario dev log 0036 left open, run end to end. Previously
+      // this crawl stayed `running` forever, indistinguishable to an operator
+      // from one that is merely slow. ADR-0055's reaper is what changes that.
+      const siteId = await verifiedSite();
+      const { crawlId } = await requestCrawl(contextFor('owner'), { siteId });
+      const [job] = await claimJobs(db, 5, new Date());
+
+      await expect(
+        runCrawlJob(
+          { db: dbFailingOn(2, 3, 4, 5, 6, 7, 8), payload: job!.payload!, now: new Date() },
+          { network: net(OPEN_SITE) },
+        ),
+      ).rejects.toThrow(/connection terminated/);
+
+      // Stranded, exactly as above.
+      expect((await getCrawl(contextFor('owner'), crawlId)).status).toBe('running');
+
+      // The database is back. A later worker pass reaps it — `now` is advanced
+      // past the crawl's derived staleness bound rather than the clock being
+      // waited on, which is the same trick `--once` uses for scheduling.
+      const later = new Date(Date.now() + 500 * 30_000 + 31 * 60 * 1000);
+      const reaped = await reapAbandonedCrawls(db, later);
+
+      expect(reaped.map((r) => r.crawlId)).toEqual([crawlId]);
+
+      const view = await getCrawl(contextFor('owner'), crawlId);
+      expect(view.status).toBe('failed');
+      expect(view.failureCategory).toBe('internal_error');
+      expect(view.completedAt).not.toBeNull();
+      expect(view.failureDetail).toBe(
+        'The crawl stopped responding and was marked failed automatically.',
+      );
+    });
+
+    it('the reaper does not touch a crawl the handler already marked failed', async () => {
+      // The ordinary failure path still wins: a transient blip lets
+      // markCrawlFailed succeed, and the reaper must find nothing to do.
+      const siteId = await verifiedSite();
+      const { crawlId } = await requestCrawl(contextFor('owner'), { siteId });
+      const [job] = await claimJobs(db, 5, new Date());
+
+      await expect(
+        runCrawlJob(
+          { db: blipOnFirstStep(), payload: job!.payload!, now: new Date() },
+          { network: net(OPEN_SITE) },
+        ),
+      ).rejects.toThrow();
+
+      const before = await getCrawl(contextFor('owner'), crawlId);
+      expect(before.status).toBe('failed');
+
+      const later = new Date(Date.now() + 500 * 30_000 + 31 * 60 * 1000);
+      expect(await reapAbandonedCrawls(db, later)).toHaveLength(0);
+      expect((await getCrawl(contextFor('owner'), crawlId)).completedAt).toBe(before.completedAt);
     });
   });
 
