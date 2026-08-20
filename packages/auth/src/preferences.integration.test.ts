@@ -50,10 +50,13 @@ describeIntegration('theme preference', () => {
     return row!.id;
   }
 
-  it('⚠️ an account that has never chosen reads as dark', async () => {
-    // The compatibility guarantee, through the code path the layout uses.
+  it('an account that has never chosen reads as the current default', async () => {
+    // ⚠️ ASSERTED `dark` UNTIL ADR-0057 MOVED THE DEFAULT TO `growth-bright`.
+    // Updated rather than deleted, and pinned to the literal as well as the
+    // constant — asserting only `DEFAULT_THEME_PREFERENCE` would still pass if
+    // the column default and the application constant had drifted apart.
     const id = await newUser('untouched@example.test');
-    expect(await getThemePreference(db, id)).toBe('dark');
+    expect(await getThemePreference(db, id)).toBe('growth-bright');
     expect(await getThemePreference(db, id)).toBe(DEFAULT_THEME_PREFERENCE);
   });
 
@@ -79,7 +82,8 @@ describeIntegration('theme preference', () => {
     await setThemePreference(db, mine, 'light');
 
     expect(await getThemePreference(db, mine)).toBe('light');
-    expect(await getThemePreference(db, theirs)).toBe('dark');
+    // Untouched, so still the default — whatever the default currently is.
+    expect(await getThemePreference(db, theirs)).toBe(DEFAULT_THEME_PREFERENCE);
   });
 
   it('moves updatedAt, because the user record changed', async () => {
