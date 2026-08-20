@@ -322,6 +322,17 @@ export const NAVIGATION: readonly NavGroup[] = [
         description: 'Tags and custom contact fields for this workspace.',
       },
       {
+        id: 'appearance',
+        label: 'Appearance',
+        href: '/system/appearance',
+        status: 'built',
+        stage: 4,
+        // The only item in this group that is a PERSON's setting rather than
+        // the workspace's — it needs no capability, and changing it is
+        // invisible to everyone else.
+        description: 'Your theme. Saved to your account, not the workspace.',
+      },
+      {
         id: 'settings',
         label: 'Settings',
         href: '/system/settings',

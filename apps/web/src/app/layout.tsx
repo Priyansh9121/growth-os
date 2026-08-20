@@ -23,6 +23,7 @@ import type { Metadata, Viewport } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import { AuthTransitionProvider } from '../features/auth-transition/provider';
+import { resolveRequestTheme } from '../server/theme';
 import { GrowthFieldHost } from '../features/growth-field/growth-field-host';
 import './globals.css';
 
@@ -49,14 +50,26 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+/**
+ * Never statically rendered: the theme depends on the session cookie. Every
+ * route in this app was already `force-dynamic` before this — verified, not
+ * assumed — so nothing loses static rendering by resolving it here.
+ */
+export const dynamic = 'force-dynamic';
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // ⚠️ RESOLVED ON THE SERVER, so the correct attribute is in the first byte of
+  // HTML and no wrong-theme frame is ever painted. Dark for a signed-out
+  // visitor, which is what every visitor saw before this existed.
+  const theme = await resolveRequestTheme();
+
   return (
     <html
       lang="en"
-      // Dark is the default and the primary design target. `suppressHydrationWarning`
-      // is set because a future theme-preference script will set data-theme
-      // before React hydrates.
-      data-theme="dark"
+      // `suppressHydrationWarning` is kept: it was added for a client theme
+      // script that no longer needs to exist, and it still costs nothing while
+      // guarding the one attribute a browser extension is most likely to touch.
+      data-theme={theme}
       suppressHydrationWarning
       className={`${GeistSans.variable} ${GeistMono.variable}`}
     >
