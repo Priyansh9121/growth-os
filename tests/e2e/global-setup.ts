@@ -7,12 +7,10 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { e2eDatabaseUrl, redactDatabaseUrl } from './database-url.mjs';
 
 export default function globalSetup(): void {
-  const databaseUrl =
-    process.env['E2E_DATABASE_URL'] ??
-    process.env['TEST_DATABASE_URL'] ??
-    'postgresql://growth_os:growth_os@127.0.0.1:5432/growth_os_test';
+  const databaseUrl = e2eDatabaseUrl();
 
   const env = {
     ...process.env,
@@ -23,7 +21,7 @@ export default function globalSetup(): void {
     NODE_ENV: 'development',
   };
 
-  console.info('[e2e] migrating and seeding', databaseUrl.replace(/:[^:@]*@/, ':***@'));
+  console.info('[e2e] migrating and seeding', redactDatabaseUrl(databaseUrl));
   execFileSync('npm', ['run', 'db:migrate'], { env, stdio: 'inherit' });
   execFileSync('npm', ['run', 'db:seed'], { env, stdio: 'inherit' });
 }

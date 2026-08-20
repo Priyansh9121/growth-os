@@ -16,18 +16,15 @@
  */
 
 import { defineConfig, devices } from '@playwright/test';
+// Resolved in one place, shared with the global setup and the `verify:e2e`
+// preflight — a preflight that checked a different database than the suite
+// connects to would be a check that lies. See tests/e2e/database-url.mjs.
+import { e2eDatabaseUrl } from './tests/e2e/database-url.mjs';
 
 const PORT = Number(process.env['E2E_PORT'] ?? 3210);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
-/**
- * The E2E database. Separate from the development database so a test run
- * cannot destroy work in progress — the suite seeds and truncates freely.
- */
-const DATABASE_URL =
-  process.env['E2E_DATABASE_URL'] ??
-  process.env['TEST_DATABASE_URL'] ??
-  'postgresql://growth_os:growth_os@127.0.0.1:5432/growth_os_test';
+const DATABASE_URL = e2eDatabaseUrl();
 
 export default defineConfig({
   testDir: './tests/e2e',
