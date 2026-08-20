@@ -204,11 +204,15 @@ session:
 
 1. **`npm run verify:all` passes** — state the observed test count
 2. Migrations apply from zero on a throwaway database, then it is destroyed
-3. Committed in logical slices, each independently green, tree clean, pushed
-4. An ADR exists for every non-obvious decision made
-5. Dev log entry written
+3. **`npm run verify:e2e` passes** — state the observed test count. Required
+   when the change could reach a browser: anything in `apps/web`, `packages/ui`,
+   the design tokens, or a route. Skippable only for changes that provably
+   cannot — say which, and why, rather than omitting it silently.
+4. Committed in logical slices, each independently green, tree clean, pushed
+5. An ADR exists for every non-obvious decision made
+6. Dev log entry written
 
-Anything short of all five is reported as unfinished, with the gap named.
+Anything short of all six is reported as unfinished, with the gap named.
 
 ### ⚠️ Why (1) defers to the repository instead of listing the checks
 
@@ -224,10 +228,31 @@ a gate is added there it applies here immediately, with nothing to remember.
 Today that is `format:check`, `lint`, `typecheck`, `test`, `verify:boundaries`
 and `verify:gitignore`.
 
-**(2) stays separate on purpose.** `verify:all` cannot run it — it needs a
-database — so folding it in would delete the check rather than inherit it. It is
-the gate that catches a migration which passes review and fails on a fresh
-schema, which is every migration's first real test.
+**(2) and (3) stay separate on purpose — the database tier.** `verify:all` cannot
+run either: (2) needs a database, and (3) needs a database, a production build
+and a browser. Folding either in would delete the check rather than inherit it.
+
+(2) is the gate that catches a migration which passes review and fails on a
+fresh schema, which is every migration's first real test.
+
+(3) is the gate that catches what no unit test can see. Three consecutive
+sessions shipped or nearly shipped browser-only defects — a CSS cascade bug that
+made three of five themes render as a fourth, and a class-merging bug that left
+every primary button's label at 1.47:1 contrast. Both were invisible to a green
+`verify:all` because the values were right and only the rendered result was
+wrong.
+
+⚠️ **`verify:e2e` FAILS when it cannot run; it never skips.** That is the
+opposite of the integration suite, which self-skips without a database so a
+developer with no PostgreSQL still gets a useful `verify:all`. Applying that
+trade to a browser gate would produce a green result having run no browser,
+which is the failure this section is about.
+
+⚠️ **It is honest about what it does not cover.** The e2e suite tests auth, CSP,
+CRM, lead capture and lifecycle. It does **not** test themes, colour or
+contrast — neither of the two defects above would have been caught by running
+it, and both were found by writing a throwaway browser probe. Running (3) is not
+a substitute for looking at the thing you changed.
 
 ---
 

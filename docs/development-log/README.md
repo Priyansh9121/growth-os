@@ -72,3 +72,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0040](0040-opening-a-browser.md)                        | Opening a browser, and three themes that never rendered     | 2026-08-20 |
 | [0041](0041-spending-the-accent.md)                      | Spending the accent, and a contrast rule never in force     | 2026-08-20 |
 | [0042](0042-the-build-was-never-broken.md)               | The build was never broken                                  | 2026-08-20 |
+| [0043](0043-the-browser-gate.md)                         | The browser gate, and what three dev logs got wrong         | 2026-08-21 |

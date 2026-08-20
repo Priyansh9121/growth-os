@@ -75,14 +75,53 @@ A stacking-context bug: the top bar's `z-30` ordered it only within its wrapper
 component test passed — jsdom has no layout. A real browser found it on the
 first run.
 
+## Running the browser suite: `npm run verify:e2e`
+
+**71 tests** across `tests/e2e/`, against a **production build** — the dev server
+has different CSP requirements, so testing it would prove nothing about what
+ships.
+
+```bash
+npm run verify:e2e     # preflight, then build, then the suite
+```
+
+It needs three things `verify:all` does not: a reachable PostgreSQL, a
+production build, and Chromium (`npm run e2e:install`). The preflight checks all
+three and **fails with an actionable message** rather than discovering the
+problem ninety seconds later inside `db:migrate`.
+
+| Gate         | Needs                    | Measured cost          |
+| ------------ | ------------------------ | ---------------------- |
+| `verify:all` | nothing                  | ~51 s                  |
+| `verify:e2e` | database, build, browser | ~74 s warm, ~91 s cold |
+
+⚠️ **It fails; it never skips.** The integration project self-skips without a
+database so that a developer with no PostgreSQL still gets a useful
+`verify:all`. A browser gate must not make that trade — a green result having
+run no browser is worse than no gate. This is why it sits beside the
+migrations-from-zero check in [AGENTS.md §7](../../AGENTS.md) rather than inside
+`verify:all`.
+
+The database URL resolves through `tests/e2e/database-url.mjs`, imported by the
+Playwright config, the global setup and the preflight, so a preflight cannot
+check one database while the suite connects to another.
+
+### ⚠️ What it does NOT cover
+
+Auth, CSP, CRM, lead capture, lifecycle and tenant isolation — but **not themes,
+colour or contrast**. Two browser-only defects found in Stage 4
+([0040](../development-log/0040-opening-a-browser.md),
+[0041](../development-log/0041-spending-the-accent.md)) would not have been
+caught by running this suite; both needed a throwaway browser probe written for
+the question. Running it is not a substitute for looking at what you changed.
+
 ## Not yet built
 
-| Layer                   | Status                                                                                                                                                         |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| End-to-end (Playwright) | Config not yet added. The Stage 1 flows were verified manually and recorded in [development-log/0005](../development-log/0005-verification-and-measurement.md) |
-| Visual regression       | Deferred until the design system stabilises; screenshot tests on a moving design are pure noise                                                                |
-| Load / performance      | Stage 22                                                                                                                                                       |
-| Coverage thresholds     | Deliberately none. A percentage target rewards testing trivial code; the negative-path tests above are the real measure                                        |
+| Layer               | Status                                                                                                                  |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Visual regression   | Deferred until the design system stabilises; screenshot tests on a moving design are pure noise                         |
+| Load / performance  | Stage 22                                                                                                                |
+| Coverage thresholds | Deliberately none. A percentage target rewards testing trivial code; the negative-path tests above are the real measure |
 
 ## Conventions
 
