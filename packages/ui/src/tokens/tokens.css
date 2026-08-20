@@ -214,6 +214,146 @@
   --shadow-glow: 0 0 24px -6px oklch(0.56 0.13 165 / 0.25);
 }
 
+/* ============================================================================
+   GROWTH THEMES
+   Three palettes sharing one intent: the product should read as MOMENTUM, not
+   as a neutral instrument panel. Dark and Light above stay exactly as they
+   were, for people who want the quiet version.
+
+   ⚠️ THE HUE IS THE WHOLE DISTINCTION. Dark/Light use hue 165 — a cool
+   teal-mint that reads as "instrument", "measured", "telemetry". These use hue
+   ~133-140, a leaf green that reads as growth and season. 30° apart is not a
+   tint of the same idea; it is a different one. Derived from the reviewed
+   sketch (#639922 → oklch 0.622 0.156 131.5), not copied from it.
+
+   Every value below was designed against the contrast gate rather than picked
+   and then checked: see contrast.test.ts, which parses these blocks and
+   computes real WCAG ratios.
+
+   @see docs/decisions/ADR-0057-growth-theme-palettes.md
+   ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+   GROWTH BRIGHT — the default.
+   Light, confident, decisive. The base is not white: a faint green cast (chroma
+   0.009 at hue 133) keeps it from reading as a blank document, so the accent
+   arrives as the loudest note in an already warm room rather than as the only
+   colour on paper.
+
+   ⚠️ THE ACCENT IS DARKER THAN THE SKETCH, DELIBERATELY. The reviewed mid-tone
+   sits at L 0.622, which measures 3.2:1 on this surface — below the 4.5:1 body
+   text bar. Dropped to L 0.52, where it measures 5.23:1 and still reads as the
+   same confident green. Exactly the trade the Light theme already made, and for
+   the same reason.
+   -------------------------------------------------------------------------- */
+:root[data-theme='growth-bright'] {
+  --color-canvas: oklch(0.981 0.009 133);
+  --color-surface-1: oklch(0.998 0.003 133);
+  --color-surface-2: oklch(0.962 0.014 133);
+  --color-surface-3: oklch(1 0 0);
+  --color-line: oklch(0.885 0.022 133);
+  --color-line-strong: oklch(0.79 0.035 133);
+
+  --color-text: oklch(0.27 0.06 136);
+  --color-text-muted: oklch(0.45 0.045 136);
+  --color-text-subtle: oklch(0.57 0.04 136);
+  --color-text-inverse: oklch(0.99 0.004 133);
+
+  --color-signal: oklch(0.52 0.145 133);
+  --color-signal-strong: oklch(0.44 0.13 136);
+  --color-signal-dim: oklch(0.78 0.1 133);
+  --color-signal-faint: oklch(0.94 0.04 133);
+
+  --color-attention: oklch(0.53 0.12 62);
+  --color-attention-dim: oklch(0.89 0.07 78);
+  --color-critical: oklch(0.52 0.2 25);
+  --color-critical-dim: oklch(0.9 0.045 25);
+  --color-info: oklch(0.52 0.125 245);
+
+  /* Elevation by shadow, not luminance — the rule light surfaces already follow. */
+  --shadow-sm: 0 1px 2px oklch(0.27 0.06 136 / 0.07);
+  --shadow-md: 0 4px 16px -4px oklch(0.27 0.06 136 / 0.12);
+  --shadow-lg: 0 16px 48px -12px oklch(0.27 0.06 136 / 0.18);
+  --shadow-glow: 0 0 24px -6px oklch(0.52 0.145 133 / 0.3);
+}
+
+/* ----------------------------------------------------------------------------
+   GROWTH DARK — the same energy after dark.
+   Not an inversion of growth-bright: the accent gets BRIGHTER and more
+   saturated (L 0.83, chroma 0.19) than the plain Dark theme's 0.8/0.15, which
+   is what makes it read as glowing rather than merely visible. The neutrals
+   carry a green cast at hue 140 instead of the cool 255, so the whole surface
+   agrees with the accent rather than sitting under it.
+   -------------------------------------------------------------------------- */
+:root[data-theme='growth-dark'] {
+  --color-canvas: oklch(0.155 0.019 140);
+  --color-surface-1: oklch(0.195 0.022 140);
+  --color-surface-2: oklch(0.233 0.025 140);
+  --color-surface-3: oklch(0.272 0.027 140);
+  --color-line: oklch(0.31 0.026 140);
+  --color-line-strong: oklch(0.41 0.03 140);
+
+  --color-text: oklch(0.97 0.012 133);
+  --color-text-muted: oklch(0.755 0.028 133);
+  --color-text-subtle: oklch(0.615 0.03 133);
+  --color-text-inverse: oklch(0.16 0.02 140);
+
+  --color-signal: oklch(0.83 0.19 137);
+  --color-signal-strong: oklch(0.89 0.2 140);
+  --color-signal-dim: oklch(0.55 0.12 137);
+  --color-signal-faint: oklch(0.31 0.06 140);
+
+  --color-attention: oklch(0.82 0.15 75);
+  --color-attention-dim: oklch(0.51 0.09 75);
+  --color-critical: oklch(0.67 0.2 25);
+  --color-critical-dim: oklch(0.43 0.12 25);
+  --color-info: oklch(0.76 0.11 230);
+
+  /* Dark surfaces get structure from luminance steps; shadow only floats. */
+  --shadow-glow: 0 0 28px -6px oklch(0.83 0.19 137 / 0.45);
+}
+
+/* ----------------------------------------------------------------------------
+   GROWTH WARM — the same intent, human rather than technical.
+   Amber at hue 55-78 instead of green. Green says "the chart is up"; amber says
+   "someone is looking after this". Same structure, same contrast bar, different
+   register — for businesses where a dashboard that looks like a trading
+   terminal is the wrong reassurance.
+   -------------------------------------------------------------------------- */
+:root[data-theme='growth-warm'] {
+  --color-canvas: oklch(0.982 0.012 78);
+  --color-surface-1: oklch(0.993 0.005 78);
+  --color-surface-2: oklch(0.963 0.018 74);
+  --color-surface-3: oklch(1 0 0);
+  --color-line: oklch(0.888 0.026 74);
+  --color-line-strong: oklch(0.795 0.04 70);
+
+  --color-text: oklch(0.28 0.055 55);
+  --color-text-muted: oklch(0.455 0.05 55);
+  --color-text-subtle: oklch(0.575 0.045 58);
+  --color-text-inverse: oklch(0.99 0.006 78);
+
+  --color-signal: oklch(0.52 0.128 55);
+  --color-signal-strong: oklch(0.44 0.115 50);
+  --color-signal-dim: oklch(0.8 0.09 65);
+  --color-signal-faint: oklch(0.95 0.035 72);
+
+  /* ⚠️ `attention` sits at hue 82 while `signal` is at 55. In a warm palette
+     the two families collide, so the amber that means "look at this" is pushed
+     yellower than the amber that means "this is working" — a status colour that
+     is indistinguishable from the accent is not a status colour. */
+  --color-attention: oklch(0.53 0.108 82);
+  --color-attention-dim: oklch(0.89 0.07 82);
+  --color-critical: oklch(0.52 0.2 25);
+  --color-critical-dim: oklch(0.9 0.045 25);
+  --color-info: oklch(0.52 0.125 245);
+
+  --shadow-sm: 0 1px 2px oklch(0.28 0.055 55 / 0.07);
+  --shadow-md: 0 4px 16px -4px oklch(0.28 0.055 55 / 0.12);
+  --shadow-lg: 0 16px 48px -12px oklch(0.28 0.055 55 / 0.18);
+  --shadow-glow: 0 0 24px -6px oklch(0.52 0.128 55 / 0.3);
+}
+
 /* Respect the OS preference when the user has not made an explicit choice. */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme='dark']) {
@@ -259,8 +399,16 @@
     --focus-ring: 0 0 0 2px var(--color-canvas), 0 0 0 4px var(--color-signal);
   }
 
-  :root[data-theme='light'] {
+  :root[data-theme='light'],
+  :root[data-theme='growth-bright'],
+  :root[data-theme='growth-warm'] {
     color-scheme: light;
+  }
+
+  /* Named explicitly rather than left to the `:root` default, so that adding a
+     theme is one edit in one place instead of two that can disagree. */
+  :root[data-theme='growth-dark'] {
+    color-scheme: dark;
   }
 
   @media (prefers-color-scheme: light) {
