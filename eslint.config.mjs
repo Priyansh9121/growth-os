@@ -455,7 +455,15 @@ export default tseslint.config(
   // also need Node globals declared explicitly — the `**/*.{ts,tsx}` block
   // above does not match them.
   {
-    files: ['packages/database/src/scripts/**/*.ts', 'scripts/**/*.mjs', '*.mjs'],
+    files: [
+      'packages/database/src/scripts/**/*.ts',
+      'scripts/**/*.mjs',
+      // `tests/e2e/database-url.mjs` is `.mjs` so the Playwright config, the
+      // global setup and the `verify:e2e` preflight can all import one copy of
+      // the database URL. It runs in Node like the rest of this block.
+      'tests/**/*.mjs',
+      '*.mjs',
+    ],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'module',
