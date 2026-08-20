@@ -114,6 +114,23 @@
   --color-critical-dim: oklch(0.42 0.12 25);
   --color-info: oklch(0.75 0.11 230);
 
+  /* ⚠️ ACCENT EMPHASIS — OPT-IN, AND OFF HERE.
+     Two tokens that let the Growth themes spend more accent on dashboard stat
+     cards without touching Dark or Light (ADR-0058).
+
+     Both resolve LAZILY. `var(--color-text)` is not evaluated in this block —
+     it is evaluated where the token is USED, against whatever `--color-text`
+     the active theme set. So Dark and Light each get their own correct text
+     colour with no per-theme declaration and, more importantly, no way to
+     forget one: a sixth theme inherits "no emphasis" automatically rather than
+     inheriting a hard-coded value from the dark base and rendering white on
+     white.
+
+     Only the three Growth blocks override these. Dark and Light are unchanged,
+     which the theme-parity test asserts rather than trusting to review. */
+  --color-metric-emphasis: var(--color-text);
+  --color-card-accent: transparent;
+
   /* Data visualisation. Ordered for distinguishability under the common
      colour-vision deficiencies and in greyscale. */
   --color-viz-1: oklch(0.8 0.15 165);
@@ -275,6 +292,11 @@
   --shadow-md: 0 4px 16px -4px oklch(0.27 0.06 136 / 0.12);
   --shadow-lg: 0 16px 48px -12px oklch(0.27 0.06 136 / 0.18);
   --shadow-glow: 0 0 24px -6px oklch(0.52 0.145 133 / 0.3);
+  /* Accent emphasis ON — see ADR-0058. The dashboard's stat cards carry a
+     stripe and colour their genuinely-positive values, which is where this
+     palette's intent lands rather than being rationed to a nav pill. */
+  --color-metric-emphasis: var(--color-signal);
+  --color-card-accent: var(--color-signal);
 }
 
 /* ----------------------------------------------------------------------------
@@ -311,6 +333,11 @@
 
   /* Dark surfaces get structure from luminance steps; shadow only floats. */
   --shadow-glow: 0 0 28px -6px oklch(0.83 0.19 137 / 0.45);
+  /* Accent emphasis ON — see ADR-0058. The dashboard's stat cards carry a
+     stripe and colour their genuinely-positive values, which is where this
+     palette's intent lands rather than being rationed to a nav pill. */
+  --color-metric-emphasis: var(--color-signal);
+  --color-card-accent: var(--color-signal);
 }
 
 /* ----------------------------------------------------------------------------
@@ -352,6 +379,11 @@
   --shadow-md: 0 4px 16px -4px oklch(0.28 0.055 55 / 0.12);
   --shadow-lg: 0 16px 48px -12px oklch(0.28 0.055 55 / 0.18);
   --shadow-glow: 0 0 24px -6px oklch(0.52 0.128 55 / 0.3);
+  /* Accent emphasis ON — see ADR-0058. The dashboard's stat cards carry a
+     stripe and colour their genuinely-positive values, which is where this
+     palette's intent lands rather than being rationed to a nav pill. */
+  --color-metric-emphasis: var(--color-signal);
+  --color-card-accent: var(--color-signal);
 }
 
 /* Respect the OS preference when the user has not made an explicit choice.
