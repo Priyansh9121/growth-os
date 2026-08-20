@@ -222,12 +222,32 @@ It asserts three properties:
 
 1. **No existing first-party source is ignored** — via
    `git ls-files --others --ignored --exclude-standard` under each source root.
+   Build output, `node_modules` and **environment files** are exempt: an env
+   file is configuration and secrets, never source, so finding one correctly
+   hidden is the system working.
 2. **Twelve plausible future source paths remain trackable** — the paths most
    likely to collide with a careless pattern. This is the check that matters,
    because it fires _before_ the directory exists.
 3. **Nothing dangerous is tracked** — no `.env`, key material, model weights,
    dumps, logs, `node_modules` or build output. Plus: `.env.example` is _not_
    ignored, and `.env` / `.env.local` _are_.
+
+### ⚠️ Property 3 matches env files on the BASENAME, and used not to
+
+The rule read `path.startsWith('.env')`, which only ever matched at the
+repository root — `apps/web/.env.local` starts with `apps/`. Measured: it caught
+`.env.local` and missed `apps/web/.env.local`, `packages/ui/.env` and
+`apps/web/.env.production`.
+
+That was harmless only for as long as property 1 happened to report ignored env
+files under a source root. The moment property 1 exempted them — which it now
+does, because reporting a correctly hidden secret as lost source is a false
+alarm that makes the gate noise — the two properties between them covered
+nothing, and a **tracked** nested env file passed the whole gate.
+
+A monorepo is precisely where env files are nested: `next dev` reads
+`apps/web/.env.local`. Both halves changed together, and the fix is verified by
+staging a nested `.env` probe and watching the gate fail.
 
 Manual commands for ad-hoc investigation:
 

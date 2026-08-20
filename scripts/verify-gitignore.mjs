@@ -27,7 +27,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -80,6 +80,20 @@ for (const root of SOURCE_ROOTS) {
     .filter((path) => !path.includes('next-env.d.ts'))
     .filter((path) => !path.includes('/coverage/'))
     .filter((path) => !path.endsWith('.DS_Store'))
+    // ENVIRONMENT FILES. `.gitignore` denies `.env*` on purpose and
+    // `docs/engineering/gitignore-rationale.md` explains why; an env file is
+    // configuration and secrets, never source, so finding one ignored under a
+    // source root is the system working rather than failing.
+    //
+    // ⚠️ THIS DOES NOT WEAKEN THE CHECK IT SITS IN. Property 3 below still
+    // fails the build if a `.env` file is ever TRACKED, which is the direction
+    // that actually leaks. This only stops property 1 reporting a correctly
+    // hidden secret as if it were lost source.
+    //
+    // Found because `apps/web/.env.local` — a real local config, needed there
+    // rather than at the repo root because that is where `next dev` reads it —
+    // failed this gate on a clean tree.
+    .filter((path) => !basename(path).startsWith('.env'))
     // BUILD OUTPUT of the public scripts (Stage 3). Generated from the tracked
     // sources in `apps/web/scripts/*.src.js`, with the deployment's origin
     // baked in — committing it would ship whichever origin the last developer
@@ -195,7 +209,21 @@ const tracked = git(['ls-files']).split('\n').filter(Boolean);
 
 const FORBIDDEN = [
   {
-    test: (p) => p === '.env' || (p.startsWith('.env') && !p.includes('.example')),
+    // ⚠️ MATCHED ON THE BASENAME, NOT THE PATH.
+    //
+    // This read `p.startsWith('.env')`, which only ever matched at the
+    // repository ROOT: `apps/web/.env.local` starts with `apps/`. Measured —
+    // the rule caught `.env.local` and missed `apps/web/.env.local`,
+    // `packages/ui/.env` and `apps/web/.env.production`.
+    //
+    // That gap mattered the moment property 1 above stopped reporting ignored
+    // env files, because between them the two properties then covered nothing:
+    // a TRACKED nested env file passed the whole gate. A monorepo is exactly
+    // where env files are nested — `next dev` reads `apps/web/.env.local`.
+    test: (p) => {
+      const name = basename(p);
+      return name.startsWith('.env') && !name.includes('.example');
+    },
     label: 'environment file',
   },
   { test: (p) => p.includes('node_modules/'), label: 'dependency' },
