@@ -69,3 +69,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0037](0037-the-crawl-reaper.md)                         | The crawl reaper, and a precedent that was a no-op          | 2026-08-20 |
 | [0038](0038-the-theme-switch.md)                         | The theme switch, and the light theme already there         | 2026-08-20 |
 | [0039](0039-the-growth-palettes.md)                      | Three Growth palettes, and two ways ADD VALUE could not     | 2026-08-20 |
+| [0040](0040-opening-a-browser.md)                        | Opening a browser, and three themes that never rendered     | 2026-08-20 |
