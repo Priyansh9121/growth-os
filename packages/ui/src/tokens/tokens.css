@@ -365,12 +365,27 @@
   --color-signal-dim: oklch(0.8 0.09 65);
   --color-signal-faint: oklch(0.95 0.035 72);
 
-  /* ⚠️ `attention` sits at hue 82 while `signal` is at 55. In a warm palette
-     the two families collide, so the amber that means "look at this" is pushed
-     yellower than the amber that means "this is working" — a status colour that
-     is indistinguishable from the accent is not a status colour. */
-  --color-attention: oklch(0.53 0.108 82);
-  --color-attention-dim: oklch(0.89 0.07 82);
+  /* ⚠️ `attention` IS PUSHED TO HUE 105, AND 82 WAS NOT FAR ENOUGH.
+     In a warm palette the accent and `attention` are drawn from the same
+     family, so the amber that means "look at this" has to escape the amber
+     that means "this is working". At 82 it did not: 27° of separation passed
+     ADR-0057's >20° rule while measuring a perceptual distance of ΔE 0.059,
+     against ΔE 0.155–0.200 in the four themes that do not have this problem.
+     The rule was met and the colour was still wrong, which is why the rule
+     changed too (ADR-0060).
+
+     ⚠️ HUE ALONE CANNOT REACH PARITY HERE, and that is a property of the
+     theme rather than a lack of trying. growth-warm is a light theme, so a
+     status colour must stay dark enough for 4.5:1 on cream; in the dark warm
+     band sRGB caps chroma near 0.11, which bounds how far apart two warm
+     colours can be however you rotate them. The ceiling staying warm is
+     ΔE 0.114 at hue 110 — and 110 visibly reads GREEN, which collides with
+     "green means working" everywhere else in the product. 105 is the last
+     hue that still reads as mustard rather than lime.
+
+     @see docs/decisions/ADR-0060-growth-warm-attention-hue.md */
+  --color-attention: oklch(0.535 0.114 105);
+  --color-attention-dim: oklch(0.89 0.07 105);
   --color-critical: oklch(0.52 0.2 25);
   --color-critical-dim: oklch(0.9 0.045 25);
   --color-info: oklch(0.52 0.125 245);
