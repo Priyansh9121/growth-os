@@ -59,6 +59,31 @@ export type ThemePreference = (typeof THEME_PREFERENCES)[number];
  */
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = 'growth-bright';
 
+/**
+ * The palette the SIGNED-OUT surface renders — login, forgot-password,
+ * reset-password.
+ *
+ * ⚠️ IT IS NOT `DEFAULT_THEME_PREFERENCE`, AND MUST NOT BE ALIASED TO IT.
+ * The two answer different questions. That one is _"what does a newly created
+ * ACCOUNT start with?"_; this one is _"what does someone who has no account
+ * yet see?"_ They hold the same value today and that is a coincidence, not a
+ * relationship — writing `SIGNED_OUT_THEME = DEFAULT_THEME_PREFERENCE` would
+ * restore exactly the silent coupling ADR-0059 exists to remove, while looking
+ * like a tidy-up. A test asserts they are declared independently.
+ *
+ * ⚠️ WHY IT IS PINNED. Until ADR-0059 the signed-out surface simply read the
+ * account default, so a future change to that default — ADR-0057 already made
+ * one, `dark` → `growth-bright` — would silently restyle the logged-out
+ * surface too. Nobody had decided that. Now nobody has to remember it.
+ *
+ * `growth-bright` was chosen on measurement, not taste: dev log 0040's browser
+ * walkthrough found this is the one screen where the palette fully lands —
+ * _"big green CTA, green lattice, spring-green canvas"_.
+ *
+ * @see docs/decisions/ADR-0059-signed-out-theme-is-pinned.md
+ */
+export const SIGNED_OUT_THEME: ThemePreference = 'growth-bright';
+
 export const THEME_PREFERENCE_LABELS: Readonly<Record<ThemePreference, string>> = {
   'growth-bright': 'Growth',
   'growth-dark': 'Growth Dark',
