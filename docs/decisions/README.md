@@ -171,3 +171,4 @@ ADRs, docs, code.
 | [0056](ADR-0056-user-theme-preference.md)                   | A per-account theme preference, and the light palette that existed | Accepted |
 | [0057](ADR-0057-growth-theme-palettes.md)                   | Three Growth palettes, and growth-bright becomes the default       | Accepted |
 | [0058](ADR-0058-dashboard-accent-emphasis.md)               | The dashboard spends more accent, Growth themes only               | Accepted |
+| [0059](ADR-0059-signed-out-theme-is-pinned.md)              | The signed-out surface is pinned, not inherited from the default   | Accepted |
