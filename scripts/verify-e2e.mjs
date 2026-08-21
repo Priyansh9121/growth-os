@@ -3,11 +3,21 @@
  * Run the browser suite, after checking it can actually run.
  *
  * WHY THIS WRAPPER EXISTS
- * `npm run e2e` on a machine without PostgreSQL spends ~30 seconds building the
- * app before `global-setup` fails inside `db:migrate`, and the error it prints
- * is a driver connection refusal — true, and several layers below the thing the
- * developer needs to do. This checks the preconditions first and says exactly
- * what is missing.
+ * `npm run e2e` against an unusable database fails inside `global-setup`'s
+ * `db:migrate`, and the error it prints is `Failed query: CREATE SCHEMA IF NOT
+ * EXISTS "drizzle"` — a headline about SQL, with the actual cause (`password
+ * authentication failed`) two levels down a `cause` chain. This checks the
+ * preconditions first and leads with the cause.
+ *
+ * ⚠️ THE CHECK IS A REAL CONNECTION, NOT A TCP HANDSHAKE.
+ * It used to be `net.Socket().connect(port)`, which any listener satisfies. Dev
+ * log 0044 hit the consequence: an unrelated PostgreSQL was listening on the
+ * port, this script announced "database … reachable on 5432", and the run died
+ * 11 seconds later inside migrate. Announcing "reachable" about a database we
+ * cannot log in to is worse than saying nothing — it points the reader away
+ * from the credentials, which is where the answer was.
+ *
+ * See `database-preflight.mjs` for what is checked and why that set.
  *
  * ⚠️ IT FAILS. IT NEVER SKIPS.
  *
@@ -34,8 +44,13 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import net from 'node:net';
+import postgres from 'postgres';
 import { e2eDatabaseUrl, redactDatabaseUrl } from '../tests/e2e/database-url.mjs';
+import {
+  connectionTarget,
+  describeDatabaseFailure,
+  describeMissingCreatePrivilege,
+} from './database-preflight.mjs';
 
 /** Print an actionable failure and stop. Never a warning, never a skip. */
 function fail(problem, remedy) {
@@ -46,20 +61,34 @@ function fail(problem, remedy) {
   process.exit(1);
 }
 
-/** Can we open a TCP connection to host:port within `timeoutMs`? */
-function canConnect(host, port, timeoutMs = 2000) {
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    const done = (result) => {
-      socket.destroy();
-      resolve(result);
-    };
-    socket.setTimeout(timeoutMs);
-    socket.once('connect', () => done(true));
-    socket.once('timeout', () => done(false));
-    socket.once('error', () => done(false));
-    socket.connect(port, host);
+/**
+ * Log in and ask the two questions that decide whether the suite can run.
+ *
+ * One connection, no retries, short timeout: a preflight must answer now rather
+ * than eventually. The connection is always closed, including on failure.
+ */
+async function inspectDatabase(url) {
+  const sql = postgres(url, {
+    max: 1,
+    connect_timeout: 5,
+    idle_timeout: 1,
+    max_lifetime: 10,
+    onnotice: () => {},
   });
+
+  try {
+    const [row] = await sql`
+      SELECT current_database() AS database,
+             current_user AS role,
+             has_database_privilege(current_user, current_database(), 'CREATE') AS can_create
+    `;
+    return { ok: true, ...row };
+  } catch (error) {
+    return { ok: false, error };
+  } finally {
+    // Never let a lingering socket hold the process open after a verdict.
+    await sql.end({ timeout: 2 }).catch(() => undefined);
+  }
 }
 
 // ---- 1. The database the suite will actually use -------------------------
@@ -78,15 +107,18 @@ try {
   );
 }
 
-const host = parsed.hostname;
-const port = Number(parsed.port || 5432);
+const target = connectionTarget(parsed);
+const inspection = await inspectDatabase(databaseUrl);
 
-if (!(await canConnect(host, port))) {
-  fail(
-    `nothing is listening on ${host}:${port} (from ${redactDatabaseUrl(databaseUrl)})`,
-    'Start PostgreSQL, or point E2E_DATABASE_URL at a running one. ' +
-      'See infrastructure/README.md.',
-  );
+if (!inspection.ok) {
+  const { problem, remedy } = describeDatabaseFailure(inspection.error, target);
+  fail(problem, remedy);
+}
+
+// Connecting is not enough: migrate's first statement is `CREATE SCHEMA`.
+if (!inspection.can_create) {
+  const { problem, remedy } = describeMissingCreatePrivilege(target);
+  fail(problem, remedy);
 }
 
 // ---- 2. The browser --------------------------------------------------------
@@ -114,7 +146,10 @@ if (process.platform === 'darwin' && !existsSync(browsersRoot)) {
 }
 
 // ---- 3. Run it -------------------------------------------------------------
-console.info(`\n▶ verify:e2e — database ${redactDatabaseUrl(databaseUrl)} reachable on ${port}`);
+console.info(
+  `\n▶ verify:e2e — connected to "${inspection.database}" as "${inspection.role}" ` +
+    `(${target.hostPort}), CREATE granted`,
+);
 console.info('  Building the app and running the browser suite. Expect ~70-90s.\n');
 
 try {

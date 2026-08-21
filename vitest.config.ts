@@ -33,7 +33,14 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
-          include: ['packages/*/src/**/*.test.ts', 'apps/web/src/**/*.test.ts'],
+          include: [
+            'packages/*/src/**/*.test.ts',
+            'apps/web/src/**/*.test.ts',
+            // Repository tooling. `scripts/database-preflight.test.mjs` guards the
+            // one promise `verify:e2e` makes — that it FAILS rather than skips —
+            // and that promise is worth checking in the gate everyone runs.
+            'scripts/**/*.test.mjs',
+          ],
           exclude: ['**/*.integration.test.ts', '**/node_modules/**'],
         },
       },
