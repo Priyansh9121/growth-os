@@ -8,11 +8,11 @@
  * `catch` that swallows, and the browser gate goes green having run no browser.
  *
  * The live behaviour is proven by pointing the real script at wrong databases
- * (dev log 0046). These tests pin the reasoning, and they run in `verify:all`
+ * (dev log 0045). These tests pin the reasoning, and they run in `verify:all`
  * where no database exists — which is the point, because the defect they guard
  * against is silence, not a wrong connection.
  *
- * @see docs/development-log/0046-a-preflight-that-lied.md
+ * @see docs/development-log/0045-a-preflight-that-lied.md
  */
 
 import { describe, expect, it } from 'vitest';
