@@ -269,10 +269,48 @@ describe.each(GROWTH_THEMES)('%s theme contrast', (_name, tokens) => {
     // warm theme the accent and `attention` are drawn from the same family, so
     // "this is working" and "look at this" can collapse into one colour. A
     // status colour indistinguishable from the accent is not a status colour.
+    //
+    // ⚠️ THE BAR WAS 20° AND growth-warm PASSED IT AT 27° WHILE BEING WRONG.
+    // Dev log 0041 reported the collision and this test did not fail, because
+    // 20° was picked when growth-warm was the only same-family pair and there
+    // was nothing to calibrate against. Measured across all five themes, the
+    // four with no collision separate by 62–103°, so the floor moved to 45 —
+    // above growth-warm's old 27° and below every working theme. ADR-0060.
     const signal = tokens.get('color-signal')!;
     const attention = tokens.get('color-attention')!;
     const hueGap = Math.abs(signal[2] - attention[2]);
-    expect(Math.min(hueGap, 360 - hueGap), 'signal and attention share a hue').toBeGreaterThan(20);
+    expect(Math.min(hueGap, 360 - hueGap), 'signal and attention share a hue').toBeGreaterThan(45);
+  });
+
+  /**
+   * ⚠️ THE SECOND CHECK EXISTS BECAUSE THE FIRST ONE IS A PROXY.
+   *
+   * Degrees of hue are not perceptually even: 27° of amber-against-amber
+   * separates far less than 27° of amber-against-green, which is exactly how
+   * growth-warm passed a hue rule while being the defect dev log 0041
+   * reported. This measures the distance actually seen — Euclidean in Oklab,
+   * the space these tokens are already authored in — so a future pair cannot
+   * satisfy the angle and fail the eye again.
+   *
+   * The floor is 0.09. Measured: growth-warm 0.104, growth-bright 0.156,
+   * growth-dark 0.179. growth-warm sits lowest because a light theme's status
+   * colours must stay dark for 4.5:1 on cream, and sRGB caps chroma in the
+   * dark warm band — a structural ceiling, recorded in ADR-0060 rather than
+   * engineered around.
+   */
+  it('⚠️ the accent is PERCEPTUALLY distant from attention, not merely angled away', () => {
+    const [sl, sc, sh] = tokens.get('color-signal')!;
+    const [al, ac, ah] = tokens.get('color-attention')!;
+    const toLab = (l: number, c: number, h: number): [number, number, number] => [
+      l,
+      c * Math.cos((h * Math.PI) / 180),
+      c * Math.sin((h * Math.PI) / 180),
+    ];
+    const [l1, a1, b1] = toLab(sl, sc, sh);
+    const [l2, a2, b2] = toLab(al, ac, ah);
+    const distance = Math.hypot(l1 - l2, a1 - a2, b1 - b2);
+
+    expect(distance, 'signal and attention are the same colour to the eye').toBeGreaterThan(0.09);
   });
 });
 
