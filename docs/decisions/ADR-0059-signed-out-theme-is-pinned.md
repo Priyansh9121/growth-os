@@ -73,16 +73,33 @@ The cost is accepted: two constants can drift apart. That is the feature.
 
 ## Decision — the pin is keyed on the SESSION, and its edge is stated
 
-`resolveRequestTheme()` has no access to the pathname. Every theme selector in
-`tokens.css` is `:root`-scoped, so only `<html>` — set by the single root
-layout, which ADR-0008 requires to be shared by `/login` and `/dashboard`
-alike — can carry a palette. Route-aware theming would therefore need either a
-`middleware.ts` (none exists) or a second copy of all five palettes under a
-non-`:root` selector.
+The obvious alternative — pin by ROUTE, so the `(auth)` group always renders
+the pinned palette whoever is asking — was investigated and rejected on
+evidence, not on effort.
 
-Both were rejected as far out of proportion to a colour, so the pin applies to
-**requests with no valid session**, which is what the root layout can actually
-observe.
+**Next.js forbids it at the root layout, by design.** From the framework's own
+documentation for this version (16.3.1,
+`next/dist/docs/01-app/03-api-reference/03-file-conventions/layout.md`):
+
+> Layouts do not re-render on navigation, so they do not access pathname which
+> would otherwise become stale.
+
+That is the whole argument. A route-derived theme resolved in the root layout
+would be **correct on first paint and wrong immediately afterwards**: the layout
+does not re-render when the user navigates `/login → /forgot-password`, so the
+palette would be whichever route the browser happened to land on first. Adding a
+`middleware.ts` to supply the pathname would not fix this — it supplies a value
+the layout is architecturally unable to refresh.
+
+The root layout is the only place a palette can be set at all: every selector in
+`tokens.css` is `:root`-scoped, so only `<html>` can carry one, and ADR-0008
+requires that single root layout to be shared by `/login` and `/dashboard` so
+the transition survives the navigation between them. The remaining escape — a
+second copy of all five palettes under a non-`:root` selector — is exactly the
+duplicated-vocabulary failure this repository rejects everywhere else.
+
+So the pin applies to **requests with no valid session**, which is what the root
+layout can actually observe and can observe correctly.
 
 Measured consequence, stated rather than discovered later: `/forgot-password`
 and `/reset-password` do not redirect an authenticated visitor the way

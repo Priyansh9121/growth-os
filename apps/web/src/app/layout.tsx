@@ -62,9 +62,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // HTML and no wrong-theme frame is ever painted. Confirmed in a real browser
   // (dev log 0040): the raw HTML carries `data-theme` before any stylesheet.
   //
-  // A signed-out visitor gets DEFAULT_THEME_PREFERENCE — `growth-bright` since
-  // ADR-0057, not dark. This comment said "dark" until that was observed on the
-  // rendered login page.
+  // A signed-out visitor gets SIGNED_OUT_THEME — `growth-bright`, pinned by
+  // ADR-0059 rather than inherited from the account default. This comment said
+  // "dark" until that was observed on the rendered login page (0040), then
+  // "DEFAULT_THEME_PREFERENCE" until the inheritance was made a decision (0046).
   const theme = await resolveRequestTheme();
 
   return (

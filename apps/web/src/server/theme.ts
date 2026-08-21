@@ -32,28 +32,43 @@ import 'server-only';
 
 import { cookies } from 'next/headers';
 import { getThemePreference, SESSION_COOKIE_NAME, validateSession } from '@growth-os/auth';
-import { DEFAULT_THEME_PREFERENCE, type ThemePreference } from '@growth-os/contracts';
+import { SIGNED_OUT_THEME, type ThemePreference } from '@growth-os/contracts';
 import { getDependencies } from './dependencies';
 
 /**
  * The theme for the current request.
  *
- * Signed out — the login page, a public hosted form — there is no preference to
- * apply and the answer is the default, exactly as before this existed.
+ * Signed out — the login page, forgot-password, reset-password — there is no
+ * preference to apply and the answer is `SIGNED_OUT_THEME`.
+ *
+ * ⚠️ THAT IS NOT `DEFAULT_THEME_PREFERENCE`, AND THE SWAP WAS THE POINT.
+ * It used to be. The two constants hold the same value today, so this line is
+ * visually a no-op and behaviourally a boundary: the account default may now
+ * move without dragging the logged-out surface with it. Anyone reverting this
+ * to `DEFAULT_THEME_PREFERENCE` restores a coupling nobody chose (ADR-0059).
+ *
+ * ⚠️ THE PIN IS KEYED ON THE SESSION, NOT THE ROUTE — a stated edge, not an
+ * oversight. This function cannot see the pathname, and every selector in
+ * `tokens.css` is `:root`-scoped, so only the single shared root layout can
+ * carry a palette. `/login` redirects an authenticated visitor before it
+ * renders, so it is always genuinely signed out; `/forgot-password` and
+ * `/reset-password` do not, so a signed-in visitor there still sees their own
+ * theme. Measured in a browser, not inferred — dev log 0046.
  *
  * Never throws. A failure here must not take down a page: a database that
- * cannot answer a colour question still renders, in the default theme —
- * `growth-bright` since ADR-0057. This said "in dark" until the rendered login
- * page was observed (dev log 0040).
+ * cannot answer a colour question still renders, in `growth-bright`. This said
+ * "in dark" until the rendered login page was observed (dev log 0040).
+ *
+ * @see docs/decisions/ADR-0059-signed-out-theme-is-pinned.md
  */
 export async function resolveRequestTheme(): Promise<ThemePreference> {
   try {
     const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
-    if (!token) return DEFAULT_THEME_PREFERENCE;
+    if (!token) return SIGNED_OUT_THEME;
 
     const { db, sessionConfig } = getDependencies();
     const session = await validateSession(db, token, sessionConfig);
-    if (!session) return DEFAULT_THEME_PREFERENCE;
+    if (!session) return SIGNED_OUT_THEME;
 
     return await getThemePreference(db, session.userId);
   } catch {
@@ -61,6 +76,10 @@ export async function resolveRequestTheme(): Promise<ThemePreference> {
     // replace every page in the product — including the login page someone
     // needs in order to fix whatever is broken — with an error screen, over a
     // colour scheme.
-    return DEFAULT_THEME_PREFERENCE;
+    //
+    // The signed-out palette is the right answer here even for a request that
+    // HAD a session: if the database cannot be reached, the preference cannot
+    // be known, and guessing at it would paint a theme the account may not own.
+    return SIGNED_OUT_THEME;
   }
 }
