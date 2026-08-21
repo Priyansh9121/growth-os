@@ -69,6 +69,37 @@ function alerts(page: Page) {
   return page.getByRole('alert').filter({ hasNotText: '' }).and(page.locator(':not([id])'));
 }
 
+/**
+ * Wait for a custom-field save to be CONFIRMED by the server.
+ *
+ * ⚠️ THE SAVE IS FIRE-AND-FORGET, WHICH IS WHY THIS EXISTS.
+ * `ContactCustomFields` commits on blur through `onCommit={() => void save(...)}`
+ * — deliberately not awaited, so the field stays responsive while a spinner and
+ * a `role="status"` "Saving …" message report progress. Nothing in the DOM
+ * settles synchronously, so `blur()` returning tells you the request was
+ * STARTED, not that it finished.
+ *
+ * `page.reload()` immediately afterwards therefore raced the PUT and could tear
+ * it down mid-flight, leaving the field empty on the reloaded page. That is the
+ * intermittent failure dev log 0043 recorded and 0044 left open. Proven under a
+ * controlled 800 ms delay on the route: the old sequence fails every time, and
+ * this one passes (dev log 0045).
+ *
+ * ⚠️ IT WAITS ON THE RESPONSE, NOT ON THE SPINNER. The "Saving …" indicator is
+ * the obvious candidate and is the wrong one: a fast save can come and go before
+ * a poll observes it, so "wait until it is absent" is trivially true before the
+ * request has even begun. The promise below is created BEFORE the action that
+ * triggers it, so it cannot miss the response however fast the server answers.
+ * Never a fixed sleep — that narrows the window without closing it (§6).
+ */
+function fieldSaved(page: Page): Promise<unknown> {
+  return page.waitForResponse(
+    (response) =>
+      /\/api\/crm\/contacts\/[^/]+\/fields$/.test(new URL(response.url()).pathname) &&
+      response.request().method() === 'PUT',
+  );
+}
+
 test.describe('contact merge', () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page, 'sam@abcplumbing.test');
@@ -225,8 +256,12 @@ test.describe('tags and custom fields', () => {
     // The custom field form is rendered FROM the definition, not hard-coded.
     const field = page.getByLabel(fieldLabel);
     await expect(field).toBeVisible();
+    // Created BEFORE the blur that triggers the save, so the response cannot
+    // be missed. See `fieldSaved`.
+    const saved = fieldSaved(page);
     await field.fill('Terrace');
     await field.blur();
+    await saved;
 
     await page.reload();
     await expect(page.getByLabel(fieldLabel)).toHaveValue('Terrace');
@@ -252,8 +287,10 @@ test.describe('tags and custom fields', () => {
     // server's rule is what governs — the field commits empty rather than
     // storing something it cannot compare.
     const field = page.getByLabel(fieldLabel);
+    const saved = fieldSaved(page);
     await field.fill('12');
     await field.blur();
+    await saved;
     await page.reload();
     await expect(page.getByLabel(fieldLabel)).toHaveValue('12');
   });
