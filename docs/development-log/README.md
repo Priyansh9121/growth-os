@@ -74,3 +74,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0042](0042-the-build-was-never-broken.md)               | The build was never broken                                  | 2026-08-20 |
 | [0043](0043-the-browser-gate.md)                         | The browser gate, and what three dev logs got wrong         | 2026-08-21 |
 | [0044](0044-two-flakes.md)                               | Two flakes, both structural, neither found by re-running    | 2026-08-21 |
+| [0045](0045-a-preflight-that-lied.md)                    | A preflight that knocked instead of logging in              | 2026-08-21 |

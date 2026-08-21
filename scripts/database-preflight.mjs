@@ -40,7 +40,7 @@
  * `drizzle.__drizzle_migrations` would reject exactly the state the suite is
  * designed to start from.
  *
- * @see docs/development-log/0046-a-preflight-that-lied.md
+ * @see docs/development-log/0045-a-preflight-that-lied.md
  */
 
 /** SQLSTATE and system error codes worth naming individually. */
