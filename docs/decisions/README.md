@@ -177,3 +177,4 @@ ADRs, docs, code.
 | [0062](ADR-0062-status-colour-is-never-the-only-carrier.md) | Status colour is never the only carrier of a judgement                        | Accepted |
 | [0063](ADR-0063-agent-platform-data-model.md)               | The agent platform composes with what exists rather than paralleling it       | Accepted |
 | [0064](ADR-0064-self-duplication-guardrail.md)              | The self-duplication guardrail is pure, measured, and may say "I cannot tell" | Accepted |
+| [0065](ADR-0065-guardrail-corpus-assembly.md)               | Corpus assembly is a service, and an incomplete corpus downgrades a pass      | Accepted |
