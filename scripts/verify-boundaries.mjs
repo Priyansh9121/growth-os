@@ -199,6 +199,11 @@ const PROBES = [
     source: "import { request } from 'node:https';\nexport const probe = request;\n",
   },
   {
+    name: 'agents → ui (a service is not an application layer)',
+    file: 'packages/agents/src/__boundary_probe.ts',
+    source: "import { Button } from '@growth-os/ui';\nexport const probe = Button;\n",
+  },
+  {
     name: 'guardrails → node:http (a pure package must not grow a socket)',
     file: 'packages/guardrails/src/__boundary_probe.ts',
     source: "import { request } from 'node:http';\nexport const probe = request;\n",

@@ -155,6 +155,41 @@ export default tseslint.config(
   },
 
   /**
+   * The agent platform's services: contracts, database and guardrails only.
+   *
+   * This package exists BECAUSE guardrails is pure — something has to assemble
+   * a corpus from tenant-scoped storage, and it is not going to be the package
+   * whose whole value is not needing storage. Importing `ui` or `auth` here
+   * would make it a second application layer rather than a service (ADR-0065).
+   */
+  {
+    files: ['packages/agents/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            { name: 'next', message: 'Domain packages must not depend on Next.js.' },
+            { name: 'react', message: 'Domain packages must not depend on React.' },
+          ],
+          patterns: [
+            {
+              group: ['@growth-os/auth', '@growth-os/auth/*', '@growth-os/ui', '@growth-os/ui/*'],
+              message:
+                'packages/agents may depend on contracts, database and guardrails only. Importing auth would create a cycle.',
+            },
+            { group: ['next/*'], message: 'Domain packages must not depend on Next.js.' },
+            {
+              group: ['../../*', '**/apps/**'],
+              message: 'Imports must not escape the package directory.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  /**
    * Guardrails is PURE, and this is what makes that a fact rather than a claim.
    *
    * The package description says it "opens no socket and touches no database"
