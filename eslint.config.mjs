@@ -154,6 +154,45 @@ export default tseslint.config(
     },
   },
 
+  /**
+   * Guardrails is PURE, and this is what makes that a fact rather than a claim.
+   *
+   * The package description says it "opens no socket and touches no database"
+   * because the comparison corpus is passed in. That design is the only reason
+   * a draft can be checked BEFORE it is persisted, which is the moment at which
+   * catching a duplicate is still cheap. A single `@growth-os/database` import
+   * would quietly convert it into a service that can only run after the fact.
+   *
+   * The network half is already covered by the global socket rule below; this
+   * closes the database and framework halves (ADR-0064).
+   */
+  {
+    files: ['packages/guardrails/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            { name: 'next', message: 'Domain packages must not depend on Next.js.' },
+            { name: 'react', message: 'Domain packages must not depend on React.' },
+          ],
+          patterns: [
+            {
+              group: ['@growth-os/*'],
+              message:
+                'packages/guardrails is pure: it is GIVEN the corpus rather than fetching one, so it can run before an output is persisted (ADR-0064).',
+            },
+            { group: ['next/*'], message: 'Domain packages must not depend on Next.js.' },
+            {
+              group: ['../../*', '**/apps/**'],
+              message: 'Imports must not escape the package directory.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // database → contracts only.
   {
     files: ['packages/database/**/*.{ts,tsx}'],

@@ -1,0 +1,14 @@
+{
+  "name": "@growth-os/guardrails",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Checks a proposed agent output before a human is asked to approve it. Pure: it is given the comparison corpus rather than fetching one, so it opens no socket and touches no database.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {}
+}

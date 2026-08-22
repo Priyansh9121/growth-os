@@ -81,3 +81,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0049](0049-the-carrier-not-the-palette.md)              | The carrier, not the palette                                | 2026-08-22 |
 | [0050](0050-autonomy-was-already-defined.md)             | Autonomy was already defined, and the guard step was wrong  | 2026-08-22 |
 | [0051](0051-the-run-gets-a-table.md)                     | The run gets a table, and ELSE false was the subtle one     | 2026-08-23 |
+| [0052](0052-the-threshold-that-moved-with-length.md)     | The threshold that moved with length                        | 2026-08-23 |
