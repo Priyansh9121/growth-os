@@ -171,6 +171,21 @@ AI's output as much as to the dashboard's.
 - **Untrusted-content handling** (see below).
 - **Per-workspace budgets** and usage metering.
 
+### Storage for the above exists; nothing writes it yet
+
+Migration 0014 adds `campaigns`, `agent_runs`, `agent_outputs`, `approvals` and
+`attribution_events`. **`agent_runs.id` IS the `runId` on `ToolContext`** — the
+correlation id above had no table behind it until then, and `agent_outputs`
+records a Level 2 draft together with the `AutonomyLevel` it was produced under.
+
+⚠️ **This is storage, not behaviour.** No planner, no approval workflow and no
+tracing code exists; every table is currently written only by tests. The Stage 7
+items above remain outstanding — what changed is that they now have somewhere to
+write to, with `agent_outputs.agent_run_id NOT NULL` making an unattributed
+output impossible to store.
+
+@see [ADR-0063](../decisions/ADR-0063-agent-platform-data-model.md)
+
 ## Prompt injection
 
 Crawled pages, emails, reviews and call transcripts are **untrusted input**. A
