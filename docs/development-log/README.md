@@ -75,3 +75,7 @@ process. Where a number appears, the command that produced it appears too.
 | [0043](0043-the-browser-gate.md)                         | The browser gate, and what three dev logs got wrong         | 2026-08-21 |
 | [0044](0044-two-flakes.md)                               | Two flakes, both structural, neither found by re-running    | 2026-08-21 |
 | [0045](0045-a-preflight-that-lied.md)                    | A preflight that knocked instead of logging in              | 2026-08-21 |
+| [0046](0046-the-signed-out-palette-decided.md)           | The signed-out palette decided, and pinned not inherited    | 2026-08-21 |
+| [0047](0047-the-amber-that-was-two-ambers.md)            | The amber that was two ambers, and the rule that let it be  | 2026-08-21 |
+| [0048](0048-the-chart-colours-were-never-there.md)       | The chart colours were never there                          | 2026-08-22 |
+| [0049](0049-the-carrier-not-the-palette.md)              | The carrier, not the palette                                | 2026-08-22 |
