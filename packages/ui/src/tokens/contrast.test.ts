@@ -376,6 +376,19 @@ describe('token integrity', () => {
     'color-signal',
     'color-attention',
     'color-critical',
+    // ⚠️ THE VIZ SEQUENCE, WHICH THIS LIST WAS MISSING WHILE THE BUG IT GUARDS
+    // AGAINST WAS LIVE. The rationale below — "a theme that inherited a colour
+    // from the dark base would pass a merged check while rendering a
+    // dark-theme value on a light surface" — described the viz tokens exactly,
+    // and they were not listed, so nothing failed. Dev logs 0039 to 0047
+    // carried it as latent debt; measured, all six sat below 3:1 on all three
+    // light canvases. ADR-0061.
+    'color-viz-1',
+    'color-viz-2',
+    'color-viz-3',
+    'color-viz-4',
+    'color-viz-5',
+    'color-viz-6',
   ];
 
   it.each(THEME_SELECTORS)('%s defines every semantic colour ITSELF', (_name, selector) => {
@@ -392,6 +405,265 @@ describe('token integrity', () => {
     for (const token of REQUIRED) {
       expect(darkTokens.has(token), `dark theme missing --${token}`).toBe(true);
     }
+  });
+});
+
+/**
+ * ⚠️ THE DATA-VISUALISATION SEQUENCE, PER THEME.
+ *
+ * `design-system.md` promises "an ordered categorical sequence, chosen for
+ * distinguishability under both common colour-vision deficiencies and
+ * greyscale printing". Until ADR-0061 nothing asserted any part of that, and
+ * measurement found the promise broken twice over:
+ *
+ *   - all six colours sat between 1.67:1 and 2.99:1 on all three LIGHT
+ *     canvases — the entire sequence under 3:1, on three of five themes,
+ *     because it was declared once against a dark canvas and never overridden;
+ *   - and on the dark canvas where it did render, azure/violet separated by
+ *     0.003 under red-green dichromacy and violet/rose by 0.007 in greyscale.
+ *
+ * The floors below are what the derived sequences actually achieve, minus a
+ * small margin, so each is a real regression guard rather than an aspiration.
+ * The light class sits closest to its floors: on a light canvas the 3:1
+ * requirement caps how dark a series may be, which caps the greyscale spread
+ * six series can occupy. That ceiling is recorded in ADR-0061, not engineered
+ * around.
+ */
+const VIZ = [
+  'color-viz-1',
+  'color-viz-2',
+  'color-viz-3',
+  'color-viz-4',
+  'color-viz-5',
+  'color-viz-6',
+] as const;
+
+/** OKLCH → Oklab. The tokens are authored in the polar form of this space. */
+function oklab([lightness, chroma, hue]: [number, number, number]): [number, number, number] {
+  const radians = (hue * Math.PI) / 180;
+  return [lightness, chroma * Math.cos(radians), chroma * Math.sin(radians)];
+}
+
+/** Perceptual distance, Euclidean in Oklab. */
+function perceptualDistance(a: [number, number, number], b: [number, number, number]): number {
+  const [l1, a1, b1] = oklab(a);
+  const [l2, a2, b2] = oklab(b);
+  return Math.hypot(l1 - l2, a1 - a2, b1 - b2);
+}
+
+/** What separates two colours once colour is removed entirely. */
+function greyscaleGap(a: [number, number, number], b: [number, number, number]): number {
+  return Math.abs(
+    relativeLuminance(oklchToLinearSrgb(a)) - relativeLuminance(oklchToLinearSrgb(b)),
+  );
+}
+
+const encodeSrgb = (u: number): number => {
+  const c = Math.min(1, Math.max(0, u));
+  return c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+};
+const decodeSrgb = (v: number): number => {
+  const c = Math.min(1, Math.max(0, v));
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+};
+const RGB_TO_LMS = [
+  [17.8824, 43.5161, 4.11935],
+  [3.45565, 27.1554, 3.86714],
+  [0.0299566, 0.184309, 1.46709],
+];
+const LMS_TO_RGB = [
+  [0.0809444479, -0.130504409, 0.116721066],
+  [-0.0102485335, 0.0540193266, -0.113614708],
+  [-0.000365296938, -0.00412161469, 0.693511405],
+];
+const apply = (m: number[][], v: number[]): number[] =>
+  m.map((row) => row[0]! * v[0]! + row[1]! * v[1]! + row[2]! * v[2]!);
+
+/**
+ * Dichromacy simulation (Viénot, Brettel & Mollon), applied to GAMMA-ENCODED
+ * sRGB, which is the form these particular LMS matrices are defined against.
+ * Dev log 0047 discarded two earlier attempts for failing the validation the
+ * first test below repeats — an unvalidated simulation would make every
+ * assertion that uses it vacuous.
+ */
+function asDichromat(
+  colour: [number, number, number],
+  kind: 'protanopia' | 'deuteranopia',
+): number[] {
+  const lms = apply(RGB_TO_LMS, oklchToLinearSrgb(colour).map(encodeSrgb));
+  const shifted =
+    kind === 'protanopia'
+      ? [2.02344 * lms[1]! - 2.52581 * lms[2]!, lms[1]!, lms[2]!]
+      : [lms[0]!, 0.494207 * lms[0]! + 1.24827 * lms[2]!, lms[2]!];
+  return apply(LMS_TO_RGB, shifted).map(decodeSrgb);
+}
+
+/** Linear sRGB → Oklab, for measuring what survives a simulation. */
+function linearToOklab([r, g, b]: number[]): [number, number, number] {
+  const l = Math.cbrt(0.4122214708 * r! + 0.5363325363 * g! + 0.0514459929 * b!);
+  const m = Math.cbrt(0.2119034982 * r! + 0.6806995451 * g! + 0.1073969566 * b!);
+  const s = Math.cbrt(0.0883024619 * r! + 0.2817188376 * g! + 0.6299787005 * b!);
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ];
+}
+
+/** The smaller of what a protanope and a deuteranope can still tell apart. */
+function dichromatDistance(a: [number, number, number], b: [number, number, number]): number {
+  const gap = (kind: 'protanopia' | 'deuteranopia'): number => {
+    const [l1, a1, b1] = linearToOklab(asDichromat(a, kind));
+    const [l2, a2, b2] = linearToOklab(asDichromat(b, kind));
+    return Math.hypot(l1 - l2, a1 - a2, b1 - b2);
+  };
+  return Math.min(gap('protanopia'), gap('deuteranopia'));
+}
+
+describe('⚠️ the dichromacy simulation is itself checked before anything trusts it', () => {
+  // Pure red and green, expressed in OKLCH.
+  const red: [number, number, number] = [0.6279, 0.2577, 29.23];
+  const green: [number, number, number] = [0.8664, 0.2948, 142.5];
+
+  it('red and green lose most of their CHROMATIC difference', () => {
+    const chromatic = (kind: 'protanopia' | 'deuteranopia'): number => {
+      const [, a1, b1] = linearToOklab(asDichromat(red, kind));
+      const [, a2, b2] = linearToOklab(asDichromat(green, kind));
+      return Math.hypot(a1 - a2, b1 - b2);
+    };
+    const normal = Math.hypot(oklab(red)[1] - oklab(green)[1], oklab(red)[2] - oklab(green)[2]);
+
+    // Not "goes to zero": a dichromat still separates red from green by
+    // LIGHTNESS. It is the colour difference that collapses, and that is the
+    // distinction dev log 0047 got wrong on its first two attempts.
+    expect(chromatic('protanopia')).toBeLessThan(normal * 0.5);
+    expect(chromatic('deuteranopia')).toBeLessThan(normal * 0.5);
+  });
+
+  it('leaves a blue/yellow difference largely intact', () => {
+    const blue: [number, number, number] = [0.452, 0.3132, 264.05];
+    const yellow: [number, number, number] = [0.9679, 0.211, 109.77];
+    expect(dichromatDistance(blue, yellow)).toBeGreaterThan(0.3);
+  });
+});
+
+/**
+ * ⚠️ THE VIZ SEQUENCE MUST BE DECLARED `static`, OR IT DOES NOT SHIP.
+ *
+ * Tailwind v4 tree-shakes `@theme` variables that nothing references, and
+ * nothing references these yet. Measured against a production build: with the
+ * six declared in the ordinary `@theme` block, `--color-viz-*` appeared ZERO
+ * times in the compiled stylesheet, so every theme resolved them to the empty
+ * string. Dev logs 0039–0047 called this "light palettes inherit dark-tuned
+ * chart colours"; in a real browser they inherited nothing at all.
+ *
+ * The four explicit `:root[data-theme=…]` blocks are never tree-shaken, so they
+ * were never at risk. The dark base has no such block — the `@theme` block IS
+ * the dark theme — which is why it alone needs `static`, and why moving these
+ * declarations back into the ordinary block would silently delete them from the
+ * build while every other test in this file stayed green.
+ */
+describe('⚠️ the dark viz sequence survives the build', () => {
+  const staticBlock = (): string => {
+    const start = css.indexOf('@theme static');
+    expect(
+      start,
+      'no `@theme static` block — the dark viz sequence would be tree-shaken',
+    ).toBeGreaterThan(-1);
+    const open = css.indexOf('{', start);
+    return css.slice(open, css.indexOf('\n}', open));
+  };
+
+  it.each([...VIZ])('%s is declared inside `@theme static`', (token) => {
+    expect(staticBlock()).toContain(`--${token}:`);
+  });
+
+  it('the ordinary `@theme` block does not declare them', () => {
+    // Two declarations of the same token, one tree-shakeable, is how this
+    // regresses without anything failing.
+    const ordinary = css.slice(css.indexOf('@theme {'), css.indexOf('@theme static'));
+    for (const token of VIZ)
+      expect(ordinary, `--${token} is back in the tree-shakeable block`).not.toContain(
+        `--${token}:`,
+      );
+  });
+});
+
+describe.each([
+  ['dark', () => darkTokens],
+  ['light', () => lightTokens],
+  ['growth-bright', () => growthBrightTokens],
+  ['growth-dark', () => growthDarkTokens],
+  ['growth-warm', () => growthWarmTokens],
+])('%s viz sequence', (_name, get) => {
+  const swatches = (): [number, number, number][] =>
+    VIZ.map((token) => {
+      const value = get().get(token);
+      if (!value) throw new Error(`--${token} missing from ${_name}`);
+      return value;
+    });
+
+  it.each([...VIZ])('%s meets 3:1 against the canvas', (token) => {
+    // WCAG 1.4.11: a graphical object carrying meaning needs 3:1, not 4.5:1.
+    // This is the assertion the whole task existed for — every one of the six
+    // failed it on all three light themes.
+    expect(ratio(get(), token, 'color-canvas')).toBeGreaterThanOrEqual(3);
+  });
+
+  it('every pair is distinguishable in normal vision', () => {
+    const all = swatches();
+    for (let i = 0; i < all.length; i++)
+      for (let j = i + 1; j < all.length; j++)
+        expect(
+          perceptualDistance(all[i]!, all[j]!),
+          `viz-${i + 1} and viz-${j + 1} are the same colour`,
+        ).toBeGreaterThan(0.12);
+  });
+
+  it('every pair survives red-green dichromacy', () => {
+    const all = swatches();
+    for (let i = 0; i < all.length; i++)
+      for (let j = i + 1; j < all.length; j++)
+        expect(
+          dichromatDistance(all[i]!, all[j]!),
+          `viz-${i + 1} and viz-${j + 1} collapse for a dichromat`,
+        ).toBeGreaterThan(0.1);
+  });
+
+  it('every pair survives greyscale printing', () => {
+    const all = swatches();
+    for (let i = 0; i < all.length; i++)
+      for (let j = i + 1; j < all.length; j++)
+        expect(
+          greyscaleGap(all[i]!, all[j]!),
+          `viz-${i + 1} and viz-${j + 1} print as the same grey`,
+        ).toBeGreaterThan(0.04);
+  });
+
+  it('no series can be mistaken for the ATTENTION colour', () => {
+    // A chart series that looks like the warning colour misreports the data.
+    const attention = get().get('color-attention')!;
+    swatches().forEach((swatch, i) =>
+      expect(
+        perceptualDistance(swatch, attention),
+        `viz-${i + 1} reads as the attention colour`,
+      ).toBeGreaterThan(0.09),
+    );
+  });
+
+  it('⚠️ only viz-1 may sit in the accent family', () => {
+    // `design-system.md` names viz-1 "signal green" deliberately: a primary
+    // series in the brand accent is intended. The other five are not, and a
+    // second accent-coloured series would make the accent meaningless.
+    const signal = get().get('color-signal')!;
+    swatches()
+      .slice(1)
+      .forEach((swatch, i) =>
+        expect(
+          perceptualDistance(swatch, signal),
+          `viz-${i + 2} reads as the accent`,
+        ).toBeGreaterThan(0.09),
+      );
   });
 });
 

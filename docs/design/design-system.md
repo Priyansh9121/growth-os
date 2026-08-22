@@ -70,14 +70,34 @@ and a test asserts they do not. The rule above is unchanged everywhere else.
 
 ### Data visualisation
 
-An ordered categorical sequence, chosen for distinguishability under both common
-colour-vision deficiencies and greyscale printing:
+An ordered categorical sequence of six, keeping the same identity in every theme:
 
 `--color-viz-1` signal green · `--color-viz-2` azure · `--color-viz-3` violet ·
 `--color-viz-4` amber · `--color-viz-5` rose · `--color-viz-6` teal
 
-Series identity must never rest on colour alone — pair with direct labels,
-dash patterns or markers.
+⚠️ **Two sequences, one per canvas class**
+([ADR-0061](../decisions/ADR-0061-per-theme-viz-sequences.md)). The five themes
+hold only two distinct canvas lightnesses — the three light themes differ by
+0.004, the two dark ones by 0.010 — so one derived light sequence and one
+derived dark sequence serve all five. Each theme declares its own copy; none
+inherits.
+
+The sequence is **derived against four constraints at once**, not chosen by eye:
+3:1 against its own canvas (WCAG 1.4.11), and separation between every pair in
+normal vision, under red-green dichromacy, and in greyscale. `viz-1` alone may
+sit in the accent family; the other five must be distinct from both
+`--color-signal` and `--color-attention`.
+
+⚠️ **All of that is asserted in `contrast.test.ts`, and none of it was until
+ADR-0061.** The claim used to be a comment and nothing else: the single
+inherited sequence measured 1.67:1–2.99:1 on every light canvas, and its azure
+and violet were 0.003 apart under red-green dichromacy.
+
+⚠️ **Greyscale has a ceiling on light canvases.** Requiring 3:1 against a
+near-white canvas caps how light a series may be, which caps the luminance range
+six series can spread across. The light sequence sits near that ceiling by
+construction. Series identity must therefore never rest on colour alone — pair
+with direct labels, dash patterns or markers.
 
 ### Light theme
 
