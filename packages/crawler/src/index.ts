@@ -25,3 +25,4 @@ export * from './sitemap/walk';
 export * from './sitemap/enqueue';
 export * from './urls/normalise';
 export * from './urls/scope';
+export * from './links/extract';
