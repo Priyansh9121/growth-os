@@ -199,6 +199,17 @@ const PROBES = [
     source: "import { request } from 'node:https';\nexport const probe = request;\n",
   },
   {
+    name: 'guardrails → node:http (a pure package must not grow a socket)',
+    file: 'packages/guardrails/src/__boundary_probe.ts',
+    source: "import { request } from 'node:http';\nexport const probe = request;\n",
+  },
+  {
+    name: 'guardrails → database (purity is what lets it run pre-persist)',
+    file: 'packages/guardrails/src/__boundary_probe.ts',
+    source:
+      "import { getDatabase } from '@growth-os/database';\nexport const probe = getDatabase;\n",
+  },
+  {
     name: 'crawler → dynamic import of node:http',
     file: 'packages/crawler/src/__boundary_probe.ts',
     source: "export const probe = () => import('node:http');\n",
