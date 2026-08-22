@@ -79,3 +79,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0047](0047-the-amber-that-was-two-ambers.md)            | The amber that was two ambers, and the rule that let it be  | 2026-08-21 |
 | [0048](0048-the-chart-colours-were-never-there.md)       | The chart colours were never there                          | 2026-08-22 |
 | [0049](0049-the-carrier-not-the-palette.md)              | The carrier, not the palette                                | 2026-08-22 |
+| [0050](0050-autonomy-was-already-defined.md)             | Autonomy was already defined, and the guard step was wrong  | 2026-08-22 |
