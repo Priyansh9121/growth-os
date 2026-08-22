@@ -131,15 +131,6 @@
   --color-metric-emphasis: var(--color-text);
   --color-card-accent: transparent;
 
-  /* Data visualisation. Ordered for distinguishability under the common
-     colour-vision deficiencies and in greyscale. */
-  --color-viz-1: oklch(0.8 0.15 165);
-  --color-viz-2: oklch(0.72 0.13 240);
-  --color-viz-3: oklch(0.68 0.16 300);
-  --color-viz-4: oklch(0.8 0.14 78);
-  --color-viz-5: oklch(0.68 0.17 15);
-  --color-viz-6: oklch(0.76 0.1 195);
-
   /* ==========================================================================
      SPACING — 4px base grid. Only these steps exist.
      ========================================================================== */
@@ -193,6 +184,51 @@
   --breakpoint-2xl: 96rem;
 }
 
+/**
+ * ⚠️ `static`, AND THE DARK SEQUENCE WOULD OTHERWISE NOT EXIST IN THE BROWSER.
+ *
+ * Tailwind v4 tree-shakes `@theme` variables that nothing references. Measured
+ * against a production build: with these six declared in the ordinary `@theme`
+ * block and no consumer, `--color-viz-*` appeared **zero times** in the
+ * compiled stylesheet — so every theme resolved them to the empty string, not
+ * to a wrong colour. Dev logs 0039 to 0047 described this as "light palettes
+ * inherit dark-tuned chart colours"; in a real browser they inherited nothing.
+ *
+ * The other four themes escape it because they declare these in ordinary
+ * `:root[data-theme=…]` blocks, which are never tree-shaken. The dark base has
+ * no such block — the `@theme` block IS the dark theme — so it needs `static`.
+ *
+ * Found by reading `getComputedStyle` in a real browser, which is the only
+ * place the compiled cascade can be observed (AGENTS.md §7).
+ */
+@theme static {
+  /* Data visualisation — the DARK sequence, and every theme now declares its
+   own rather than inheriting this one.
+
+   ⚠️ THESE VALUES ARE TUNED TO A DARK CANVAS AND WERE NEVER OVERRIDDEN.
+   Flagged as latent by dev log 0039 and carried unfixed to 0047. Measured:
+   on all three light canvases every one of the six sat between 1.67:1 and
+   2.99:1 — the whole sequence below WCAG 1.4.11's 3:1 for graphical
+   objects, on three of five themes.
+
+   ⚠️ AND THE OLD SEQUENCE DID NOT MEET ITS OWN COMMENT. It claimed
+   distinguishability "under the common colour-vision deficiencies and in
+   greyscale". Measured: azure/violet separated by 0.003 under red-green
+   dichromacy, and violet/rose by 0.007 in greyscale because both sat at
+   L 0.68 — six series carried only four distinct lightness values.
+
+   Derived rather than picked, against four simultaneous constraints, with
+   the documented hue identities kept. See ADR-0061.
+
+   @see docs/decisions/ADR-0061-per-theme-viz-sequences.md */
+  --color-viz-1: oklch(0.88 0.24 145); /* green */
+  --color-viz-2: oklch(0.58 0.105 220); /* azure */
+  --color-viz-3: oklch(0.74 0.135 280); /* violet */
+  --color-viz-4: oklch(0.66 0.155 58); /* amber */
+  --color-viz-5: oklch(0.54 0.215 10); /* rose */
+  --color-viz-6: oklch(0.92 0.1 200); /* teal */
+}
+
 /* ============================================================================
    LIGHT THEME
    A re-mapping, not an inversion: hairlines DARKEN, the accent darkens to hold
@@ -224,6 +260,17 @@
   --color-critical: oklch(0.53 0.2 25);
   --color-critical-dim: oklch(0.9 0.06 25);
   --color-info: oklch(0.53 0.14 245);
+
+  /* Data visualisation — the LIGHT-canvas sequence (ADR-0061). The three
+     light themes' canvases differ by 0.004 in lightness, so one derived
+     sequence serves all three; each declares it so `token integrity` can
+     enforce it. */
+  --color-viz-1: oklch(0.42 0.13 145); /* green */
+  --color-viz-2: oklch(0.5 0.105 235); /* azure */
+  --color-viz-3: oklch(0.58 0.235 280); /* violet */
+  --color-viz-4: oklch(0.66 0.15 63); /* amber */
+  --color-viz-5: oklch(0.34 0.14 355); /* rose */
+  --color-viz-6: oklch(0.6 0.1 190); /* teal */
 
   --shadow-sm: 0 1px 2px oklch(0.2 0.01 255 / 0.06);
   --shadow-md: 0 4px 16px -4px oklch(0.2 0.01 255 / 0.1);
@@ -287,6 +334,17 @@
   --color-critical-dim: oklch(0.9 0.045 25);
   --color-info: oklch(0.52 0.125 245);
 
+  /* Data visualisation — the LIGHT-canvas sequence (ADR-0061). The three
+     light themes' canvases differ by 0.004 in lightness, so one derived
+     sequence serves all three; each declares it so `token integrity` can
+     enforce it. */
+  --color-viz-1: oklch(0.42 0.13 145); /* green */
+  --color-viz-2: oklch(0.5 0.105 235); /* azure */
+  --color-viz-3: oklch(0.58 0.235 280); /* violet */
+  --color-viz-4: oklch(0.66 0.15 63); /* amber */
+  --color-viz-5: oklch(0.34 0.14 355); /* rose */
+  --color-viz-6: oklch(0.6 0.1 190); /* teal */
+
   /* Elevation by shadow, not luminance — the rule light surfaces already follow. */
   --shadow-sm: 0 1px 2px oklch(0.27 0.06 136 / 0.07);
   --shadow-md: 0 4px 16px -4px oklch(0.27 0.06 136 / 0.12);
@@ -330,6 +388,16 @@
   --color-critical: oklch(0.67 0.2 25);
   --color-critical-dim: oklch(0.43 0.12 25);
   --color-info: oklch(0.76 0.11 230);
+
+  /* Data visualisation — the DARK-canvas sequence (ADR-0061), the same six
+     values the `@theme` base carries, declared here so this theme does not
+     depend on inheriting them. */
+  --color-viz-1: oklch(0.88 0.24 145); /* green */
+  --color-viz-2: oklch(0.58 0.105 220); /* azure */
+  --color-viz-3: oklch(0.74 0.135 280); /* violet */
+  --color-viz-4: oklch(0.66 0.155 58); /* amber */
+  --color-viz-5: oklch(0.54 0.215 10); /* rose */
+  --color-viz-6: oklch(0.92 0.1 200); /* teal */
 
   /* Dark surfaces get structure from luminance steps; shadow only floats. */
   --shadow-glow: 0 0 28px -6px oklch(0.83 0.19 137 / 0.45);
@@ -389,6 +457,17 @@
   --color-critical: oklch(0.52 0.2 25);
   --color-critical-dim: oklch(0.9 0.045 25);
   --color-info: oklch(0.52 0.125 245);
+
+  /* Data visualisation — the LIGHT-canvas sequence (ADR-0061). The three
+     light themes' canvases differ by 0.004 in lightness, so one derived
+     sequence serves all three; each declares it so `token integrity` can
+     enforce it. */
+  --color-viz-1: oklch(0.42 0.13 145); /* green */
+  --color-viz-2: oklch(0.5 0.105 235); /* azure */
+  --color-viz-3: oklch(0.58 0.235 280); /* violet */
+  --color-viz-4: oklch(0.66 0.15 63); /* amber */
+  --color-viz-5: oklch(0.34 0.14 355); /* rose */
+  --color-viz-6: oklch(0.6 0.1 190); /* teal */
 
   --shadow-sm: 0 1px 2px oklch(0.28 0.055 55 / 0.07);
   --shadow-md: 0 4px 16px -4px oklch(0.28 0.055 55 / 0.12);
