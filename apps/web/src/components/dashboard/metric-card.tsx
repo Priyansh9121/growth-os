@@ -45,6 +45,93 @@ const DELTA_CLASSES: Record<'good' | 'bad' | 'neutral', string> = {
 };
 
 /**
+ * ⚠️ THE JUDGEMENT NOW HAS A CARRIER THAT IS NOT COLOUR.
+ *
+ * `text-signal` against `text-attention` used to be the ONLY thing separating
+ * "+18%" on Attributed revenue from "+9%" on Missed calls. The sign reports
+ * DIRECTION, and direction is not judgement — both of those render `+`, so the
+ * good result and the bad one differed by nothing but hue.
+ *
+ * Measured under simulated red-green dichromacy, the two tokens separate by
+ * **0.002** in `growth-bright`, **0.003** in `growth-dark` and **0.008** in
+ * `growth-warm`, against 0.067 and 0.085 in the two themes that survive. For a
+ * protanope or a deuteranope the two deltas were the same colour, so the card
+ * reported nothing.
+ *
+ * ⚠️ AND THE SAME ELEMENT ANNOUNCED NOTHING EITHER. The `sr-only` span carried
+ * the comparison window and not the judgement, so a screen-reader user with
+ * ordinary colour vision was in exactly the same position. One carrier closes
+ * both gaps.
+ *
+ * The colour stays. It is redundant now rather than load-bearing, which is what
+ * `accessibility.md`'s review checklist has asked for since Stage 1 and nothing
+ * enforced.
+ *
+ * @see docs/decisions/ADR-0062-status-colour-is-never-the-only-carrier.md
+ */
+const DELTA_MARK: Record<'good' | 'bad' | 'neutral', string> = {
+  good: '✓',
+  bad: '!',
+  neutral: '',
+};
+
+/** What assistive technology hears. Empty where there is no judgement to make. */
+const DELTA_JUDGEMENT: Record<'good' | 'bad' | 'neutral', string> = {
+  good: 'a good result',
+  bad: 'needs attention',
+  neutral: '',
+};
+
+/** `+`/`−` reports DIRECTION only. A flat movement has no sign to report. */
+const DIRECTION_SIGN: Record<'up' | 'down' | 'flat', string> = {
+  up: '+',
+  down: '−',
+  flat: '',
+};
+
+/**
+ * The delta readout, rendered once for both cards.
+ *
+ * ⚠️ EXTRACTED RATHER THAN DUPLICATED, AND THE TWO COPIES HAD ALREADY DRIFTED.
+ * `MetricCard` handled `flat` and `HeadlineMetric` did not — it rendered `−`
+ * for a flat movement, a minus sign on a metric that had not moved. Sharing one
+ * readout fixes that, and a test pins it, rather than leaving two copies to
+ * drift again.
+ */
+function DeltaReadout({
+  delta,
+  polarity,
+  sizeClass,
+}: {
+  delta: NonNullable<MetricValue['delta']>;
+  polarity: TrendPolarity;
+  sizeClass: string;
+}) {
+  const tone = deltaTone(delta.direction, polarity);
+  const mark = DELTA_MARK[tone];
+  const judgement = DELTA_JUDGEMENT[tone];
+
+  return (
+    <span className={`${sizeClass} font-medium ${DELTA_CLASSES[tone]}`}>
+      {mark ? (
+        // Hidden from the accessibility tree because the phrase below says the
+        // same thing in words. A glyph read aloud as "check mark" is noise.
+        <span aria-hidden="true" className="mr-0.5">
+          {mark}
+        </span>
+      ) : null}
+      {DIRECTION_SIGN[delta.direction]}
+      {Math.abs(delta.percent)}%
+      {/* Judgement and comparison window are announced but not shown: the card
+          stays dense, and nothing about it is ambiguous to assistive tech. */}
+      <span className="sr-only">
+        {judgement ? `, ${judgement}` : ''} {delta.comparisonLabel}
+      </span>
+    </span>
+  );
+}
+
+/**
  * The left accent stripe.
  *
  * ⚠️ IT IS A TOKEN, NOT A THEME CHECK. `--color-card-accent` is `transparent`
@@ -99,15 +186,7 @@ export function MetricCard({ metric }: { metric: MetricValue }) {
         </span>
 
         {metric.delta && !unavailable ? (
-          <span
-            className={`text-caption font-medium ${DELTA_CLASSES[deltaTone(metric.delta.direction, metric.polarity)]}`}
-          >
-            {metric.delta.direction === 'up' ? '+' : metric.delta.direction === 'down' ? '−' : ''}
-            {Math.abs(metric.delta.percent)}%
-            {/* The comparison window is announced but not shown, to keep the
-                card dense while remaining unambiguous to assistive tech. */}
-            <span className="sr-only"> {metric.delta.comparisonLabel}</span>
-          </span>
+          <DeltaReadout delta={metric.delta} polarity={metric.polarity} sizeClass="text-caption" />
         ) : null}
       </div>
 
@@ -152,13 +231,7 @@ export function HeadlineMetric({ metric }: { metric: MetricValue }) {
           <span className="font-mono text-metric-sm text-text-subtle">/ 100</span>
         ) : null}
         {metric.delta ? (
-          <span
-            className={`text-body font-medium ${DELTA_CLASSES[deltaTone(metric.delta.direction, metric.polarity)]}`}
-          >
-            {metric.delta.direction === 'up' ? '+' : '−'}
-            {Math.abs(metric.delta.percent)}%
-            <span className="sr-only"> {metric.delta.comparisonLabel}</span>
-          </span>
+          <DeltaReadout delta={metric.delta} polarity={metric.polarity} sizeClass="text-body" />
         ) : null}
       </div>
 

@@ -156,3 +156,116 @@ describe('the delta itself keeps its existing tones', () => {
     expect(screen.getByText(/9%/)).toHaveClass('text-attention');
   });
 });
+
+/**
+ * ⚠️ COLOUR IS NOT THE ONLY CARRIER OF THE JUDGEMENT.
+ *
+ * The tests above pin which numbers earn the accent. These pin something the
+ * suite never asserted: that a reader who cannot resolve `--color-signal` from
+ * `--color-attention` can still tell a good movement from a bad one.
+ *
+ * Under simulated red-green dichromacy the two tokens separate by 0.002 in
+ * `growth-bright`, 0.003 in `growth-dark` and 0.008 in `growth-warm` — against
+ * 0.067 in `light` and 0.085 in `dark`. Because the sign reports DIRECTION,
+ * "Attributed revenue +18%" and "Missed calls +9%" both render `+`, so for a
+ * protanope or a deuteranope the card carried no judgement at all. Neither did
+ * it for a screen-reader user: the `sr-only` span announced the comparison
+ * window and nothing else.
+ *
+ * @see docs/decisions/ADR-0062-status-colour-is-never-the-only-carrier.md
+ */
+describe('⚠️ the good/bad judgement survives with colour removed', () => {
+  /** The delta element, found by its percentage rather than by its colour. */
+  const deltaEl = (pattern: RegExp): HTMLElement[] =>
+    screen.getAllByText(pattern).filter((element) => element.className.includes('font-medium'));
+
+  it('⚠️ THE STRONG PROPERTY: same number, same direction, opposite polarity — the TEXT differs', () => {
+    // The only test here that could not be satisfied by a decoration. Both
+    // deltas are +9% up; the sole difference in the source data is polarity,
+    // which used to reach the DOM exclusively as a colour class. If the carrier
+    // is removed, both elements render the identical string and this fails.
+    render(<MetricCard metric={metric({ polarity: 'higher_is_better', delta: up(9) })} />);
+    render(<MetricCard metric={metric({ polarity: 'lower_is_better', delta: up(9) })} />);
+
+    const [good, bad] = deltaEl(/9%/);
+    expect(good, 'the good delta was not rendered').toBeDefined();
+    expect(bad, 'the bad delta was not rendered').toBeDefined();
+    expect(
+      good!.textContent,
+      'good and bad render the identical text — colour is the only carrier again',
+    ).not.toEqual(bad!.textContent);
+  });
+
+  it('the good and the bad marks are different characters, not merely present', () => {
+    // A carrier that rendered the same glyph for both would pass "a mark is
+    // shown" and fail the reader, which is the failure mode this guards.
+    render(<MetricCard metric={metric({ polarity: 'higher_is_better', delta: up(9) })} />);
+    render(<MetricCard metric={metric({ polarity: 'lower_is_better', delta: up(9) })} />);
+
+    const marks = deltaEl(/9%/).map(
+      (element) => element.querySelector('[aria-hidden="true"]')?.textContent ?? '',
+    );
+    expect(marks[0], 'the good delta has no mark').toBeTruthy();
+    expect(marks[1], 'the bad delta has no mark').toBeTruthy();
+    expect(marks[0], 'both tones render the same mark').not.toEqual(marks[1]);
+  });
+
+  it('the mark is hidden from assistive tech, and the judgement is announced in words', () => {
+    // The glyph and the phrase are two carriers for two audiences. Announcing
+    // the glyph as well would read as "check mark a good result".
+    render(<MetricCard metric={metric({ polarity: 'lower_is_better', delta: up(9) })} />);
+    const [bad] = deltaEl(/9%/);
+    expect(bad!.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    expect(bad!.textContent).toContain('needs attention');
+  });
+
+  it('a good delta announces that it is good', () => {
+    render(<MetricCard metric={metric({ delta: up(9) })} />);
+    expect(deltaEl(/9%/)[0]!.textContent).toContain('a good result');
+  });
+
+  it('⚠️ a neutral movement claims NO judgement, in either channel', () => {
+    // The negative that gives the two above their meaning. A metric with
+    // neutral polarity has no judgement to make, and inventing one would be the
+    // same failure as colouring a number for merely existing.
+    render(<MetricCard metric={metric({ polarity: 'neutral', delta: up(9) })} />);
+    const [neutral] = deltaEl(/9%/);
+    expect(neutral!.querySelector('[aria-hidden="true"]')).toBeNull();
+    expect(neutral!.textContent).not.toContain('a good result');
+    expect(neutral!.textContent).not.toContain('needs attention');
+  });
+
+  it('the comparison window is still announced alongside the judgement', () => {
+    render(<MetricCard metric={metric({ polarity: 'lower_is_better', delta: up(9) })} />);
+    expect(deltaEl(/9%/)[0]!.textContent).toContain('vs previous 30 days');
+  });
+
+  it('the headline metric carries the judgement too', () => {
+    render(<HeadlineMetric metric={metric({ formatted: '82', unit: 'score', delta: up(4) })} />);
+    const [delta] = deltaEl(/4%/);
+    expect(delta!.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    expect(delta!.textContent).toContain('a good result');
+  });
+});
+
+/**
+ * ⚠️ THE TWO CARDS HAD DRIFTED, AND SHARING ONE READOUT IS WHAT FIXED IT.
+ *
+ * `MetricCard` rendered no sign for a flat movement; `HeadlineMetric` rendered
+ * `−`, a minus sign on a metric that had not moved. Two copies of the same
+ * three-line expression, one of which had never handled the third case.
+ */
+describe('⚠️ a flat movement renders no sign, in BOTH cards', () => {
+  const flat = { percent: 0, direction: 'flat', comparisonLabel: 'vs previous' } as const;
+
+  it.each([
+    ['MetricCard', (m: MetricValue) => <MetricCard metric={m} />],
+    ['HeadlineMetric', (m: MetricValue) => <HeadlineMetric metric={m} />],
+  ])('%s renders the flat delta with no sign in front of it', (_name, renderCard) => {
+    render(renderCard(metric({ delta: flat })));
+    const [delta] = screen
+      .getAllByText(/0%/)
+      .filter((element) => element.className.includes('font-medium'));
+    expect(delta!.textContent!.trimStart()).toMatch(/^0%/);
+  });
+});
