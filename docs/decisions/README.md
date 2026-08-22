@@ -174,3 +174,4 @@ ADRs, docs, code.
 | [0059](ADR-0059-signed-out-theme-is-pinned.md)              | The signed-out surface is pinned, not inherited from the default   | Accepted |
 | [0060](ADR-0060-growth-warm-attention-hue.md)               | growth-warm's attention moves to hue 105; the rule goes perceptual | Accepted |
 | [0061](ADR-0061-per-theme-viz-sequences.md)                 | Two derived viz sequences, one per canvas class                    | Accepted |
+| [0062](ADR-0062-status-colour-is-never-the-only-carrier.md) | Status colour is never the only carrier of a judgement             | Accepted |

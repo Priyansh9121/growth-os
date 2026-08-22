@@ -17,6 +17,7 @@
 | Visible focus, never removed                | Two-layer ring in the token layer; `:focus-visible`   |
 | Focus ring ≥ 3:1 contrast                   | Computed from real token values in CI                 |
 | Body text ≥ 4.5:1, both themes              | Computed from real token values in CI                 |
+| Colour is never the only carrier of meaning | Delta judgement carries a glyph and an announcement   |
 | Errors announced without stealing focus     | `role="alert"` + `aria-live`, asserted in tests       |
 | Errors linked to their field                | `aria-describedby` → rendered element, asserted       |
 | Loading states announced                    | `aria-busy`, asserted                                 |
