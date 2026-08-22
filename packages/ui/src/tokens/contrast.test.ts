@@ -776,3 +776,133 @@ describe('accent emphasis is opt-in, and only the Growth themes opt in', () => {
     expect(base).toContain('--color-card-accent: transparent');
   });
 });
+
+/**
+ * ⚠️ SIGNAL AGAINST ATTENTION UNDER RED-GREEN DICHROMACY — MEASURED, AND THE
+ * REASON THE PRODUCT NO LONGER DEPENDS ON IT.
+ *
+ * Dev log 0047 measured this and recorded it without fixing it; 0048 carried it
+ * forward unchanged. ADR-0062 closes it, and not by moving a colour: the search
+ * showed there is no set of values that fixes all three Growth themes while they
+ * remain the themes ADR-0057 describes. So the fix went to the one surface where
+ * the pair carried meaning alone, and these assertions pin the measurement that
+ * decision rests on.
+ *
+ * ⚠️ THE METRIC IS THE CHROMATIC COMPONENT, WHICH IS NOT WHAT `dichromatDistance`
+ * ABOVE RETURNS. That function includes lightness, which is right for the viz
+ * sequence — six series free to differ in lightness. It is wrong here: signal and
+ * attention sit within 0.02 of each other in L in every theme, so there is no
+ * lightness difference to fall back on and including it flatters the result. Dev
+ * logs 0047 and 0048 both published chromatic numbers; the metric is validated
+ * against ADR-0060's published inputs below before anything is asserted, because
+ * the two metrics agree to within 1.31x where the pair survives and diverge by
+ * up to 10.56x where it collapses.
+ *
+ * @see docs/decisions/ADR-0062-status-colour-is-never-the-only-carrier.md
+ */
+describe('⚠️ signal and attention under red-green dichromacy', () => {
+  /** What a dichromat can still tell apart once lightness is excluded. */
+  const chromaticGap = (
+    a: [number, number, number],
+    b: [number, number, number],
+    kind: 'protanopia' | 'deuteranopia',
+  ): number => {
+    const [, a1, b1] = linearToOklab(asDichromat(a, kind));
+    const [, a2, b2] = linearToOklab(asDichromat(b, kind));
+    return Math.hypot(a1 - a2, b1 - b2);
+  };
+
+  const worst = (a: [number, number, number], b: [number, number, number]): number =>
+    Math.min(chromaticGap(a, b, 'protanopia'), chromaticGap(a, b, 'deuteranopia'));
+
+  const pair = (
+    tokens: Map<string, [number, number, number]>,
+  ): [[number, number, number], [number, number, number]] => [
+    tokens.get('color-signal')!,
+    tokens.get('color-attention')!,
+  ];
+
+  it('⚠️ the chromatic metric reproduces the number ADR-0060 published, from ADR-0060 inputs', () => {
+    // The same validation discipline the simulation itself gets above, applied
+    // to the metric built on it. `growth-warm` is the useful case because its
+    // attention has MOVED since — hue 82 then, 105 now — so this cannot pass by
+    // accidentally re-measuring today's file.
+    const signalThen: [number, number, number] = [0.52, 0.128, 55];
+    const attentionThen: [number, number, number] = [0.53, 0.108, 82];
+    expect(chromaticGap(signalThen, attentionThen, 'protanopia')).toBeCloseTo(0.011, 3);
+    expect(chromaticGap(signalThen, attentionThen, 'deuteranopia')).toBeCloseTo(0.005, 3);
+  });
+
+  it('⚠️ the two metrics AGREE where the pair survives and DIVERGE where it collapses', () => {
+    // The negative that stops them being used interchangeably, and the reason
+    // the choice is load-bearing rather than pedantic. Measured ratio of
+    // `dichromatDistance` to the chromatic gap:
+    //
+    //   dark 1.28x · light 1.31x · growth-bright 3.78x · growth-warm 4.67x ·
+    //   growth-dark 10.56x
+    //
+    // Where a real chromatic difference survives, the two metrics say nearly
+    // the same thing. Where it does not, everything `dichromatDistance` still
+    // reports is lightness — and signal and attention were never separated by
+    // lightness on purpose, so reporting it flatters a pair that carries no
+    // colour information at all.
+    const ratio = (tokens: Map<string, [number, number, number]>): number => {
+      const [signal, attention] = pair(tokens);
+      return dichromatDistance(signal, attention) / worst(signal, attention);
+    };
+
+    for (const tokens of [darkTokens, lightTokens]) expect(ratio(tokens)).toBeLessThan(1.5);
+    for (const [, tokens] of GROWTH_THEMES) expect(ratio(tokens)).toBeGreaterThan(3);
+  });
+
+  it.each([
+    ['dark', () => darkTokens],
+    ['light', () => lightTokens],
+  ])('%s SURVIVES — its teal accent sits across the confusion axis, not along it', (_name, get) => {
+    // The fact the whole comparison rests on. Hue 165 against a warm attention
+    // is a blue-yellow difference, which dichromacy leaves largely intact; hue
+    // 133–140 against the same attention is a red-green one, which it does not.
+    const [signal, attention] = pair(get());
+    expect(worst(signal, attention)).toBeGreaterThan(0.06);
+  });
+
+  it.each(GROWTH_THEMES)(
+    '⚠️ %s COLLAPSES, and if this ever fails re-read ADR-0062 rather than deleting it',
+    (_name, tokens) => {
+      // Deliberately an upper bound, in the shape of the inverse-text assertion
+      // above: it records a measured limitation rather than a target. Measured
+      // today — growth-bright 0.002, growth-dark 0.003, growth-warm 0.008,
+      // against 0.067 and 0.085 for the two themes that survive.
+      //
+      // A failure here means a palette change lifted a Growth theme across the
+      // line, which is good news and makes ADR-0062's premise stale. The carrier
+      // on the metric delta is still correct — it also serves screen-reader
+      // users, who were in the same position with ordinary colour vision — but
+      // the ADR's reasoning would need re-reading.
+      const [signal, attention] = pair(tokens);
+      expect(
+        worst(signal, attention),
+        'a Growth theme now separates signal from attention for a dichromat — re-read ADR-0062',
+      ).toBeLessThan(0.05);
+    },
+  );
+
+  it('⚠️ ONLY `dark` clears the standard the decorative viz sequence is held to', () => {
+    // The measurement that made the carrier universal rather than Growth-only.
+    // ADR-0061 requires every pair of CHART colours to separate by more than
+    // 0.10 under dichromacy. The signal/attention pair carries far more meaning
+    // than any chart series and four of five themes miss that bar — `light`
+    // included, at 0.088. Colour alone was never sufficient anywhere except
+    // `dark`, which is why the fix is a carrier and not a palette.
+    const clears = ([, tokens]: [string, Map<string, [number, number, number]>]): boolean =>
+      dichromatDistance(...pair(tokens)) > 0.1;
+
+    const themes: [string, Map<string, [number, number, number]>][] = [
+      ['dark', darkTokens],
+      ['light', lightTokens],
+      ...GROWTH_THEMES,
+    ];
+
+    expect(themes.filter(clears).map(([name]) => name)).toEqual(['dark']);
+  });
+});
