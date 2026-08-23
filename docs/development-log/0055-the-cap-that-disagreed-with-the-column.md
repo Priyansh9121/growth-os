@@ -150,7 +150,54 @@ one alternative that actively destroys the signal.
 
 Restored green at **32 tests** in `frontier.integration.test.ts` (30 before).
 
+## Slice 3 — the design question answered by two files already in the package
+
+`fetchPage` held the HTML — it reads the body to measure `contentLength` — and
+discarded it. The extractor could not be called from anywhere.
+
+The obvious fix is "return the body and let `runCrawl` call `extractLinks`",
+and it is wrong. `robots/fetch.ts` and `sitemap/fetch.ts` both decode their own
+body, hand it to their own parser, and return the PARSED result beside the
+response facts:
+
+| module             | returns        | facts                      | parsed     |
+| ------------------ | -------------- | -------------------------- | ---------- |
+| `robots/fetch.ts`  | `RobotsState`  | `outcome`, `detail`, `url` | `rules`    |
+| `sitemap/fetch.ts` | `SitemapState` | `outcome`, `detail`, `url` | `document` |
+| `pages/fetch.ts`   | `PageState`    | `observation`              | `links`    |
+
+The shape was not a judgement call — it was already the package's answer,
+twice. `fetchPage` was the odd one out only because extraction did not exist.
+[ADR-0068](../decisions/ADR-0068-the-page-fetch-returns-parsed-state.md).
+
+**`observation` and `links` are siblings, not nested**, and that is load-bearing.
+`PageObservation` is spread straight into `crawl_pages` by `markFetched`, so
+every field on it must be a column. Nesting `links` inside it would have needed
+a second `undefined` exception at the call site beside the one `bytes` already
+has.
+
+### The test that failed, and was wrong
+
+`a missing content-type is not treated as HTML` failed on first run: links came
+back. `FixtureTransport` substitutes `text/html; charset=utf-8` when `headers`
+is **omitted** (`packages/net/src/testing/fixtures.ts:168`), so the fixture was
+asserting the opposite of its own name. `headers: {}` is what expresses "no
+content-type". The code was right and the test was wrong — recorded because the
+next person writing a fixture without headers will believe they have no
+content-type too.
+
+**Mutation-tested:**
+
+| Mutation                                        | Result           |
+| ----------------------------------------------- | ---------------- |
+| content-type gate removed (scan every body)     | 2 tests failed ✓ |
+| base URL is the requested one, not the final    | 1 test failed ✓  |
+| scope gate removed, so parsing is unconditional | 1 test failed ✓  |
+
+Restored green at **29 tests** in `fetch.test.ts` (20 before).
+
 ## Remaining work
 
-1. `fetchPage` discards the body, so no HTML reaches a caller.
-2. Nothing writes `crawl_links` or enqueues a discovered link.
+Nothing writes `crawl_links` or enqueues a discovered link. `runCrawl`
+destructures `{ observation }` and does not yet pass a scope, so a sitemap-less
+crawl still returns one page.

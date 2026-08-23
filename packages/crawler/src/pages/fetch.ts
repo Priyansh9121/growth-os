@@ -11,9 +11,12 @@
  * the only `safeFetch` callers were `robots/fetch.ts`, `sitemap/fetch.ts` and
  * site verification. There was no page fetch to reuse or extend.
  *
- * ⚠️ IT DOES NOT PARSE THE BODY. No links, no title, no text. HTML extraction
- * is a separate brief, so a crawl driven by this discovers pages only from the
- * seed and from sitemaps.
+ * ⚠️ IT PARSES THE BODY FOR LINKS, AND FOR NOTHING ELSE. No title, no text.
+ * That is the same shape `robots/fetch.ts` and `sitemap/fetch.ts` already have:
+ * each decodes its own body, hands it to its own parser, and returns the PARSED
+ * result bundled with the response facts. The raw bytes never leave the module
+ * in any of the three, which is why none of them can leak a document into
+ * storage by accident.
  *
  * ⚠️ THE SSRF PIPELINE RUNS HERE EVEN THOUGH THE URL PASSED ADMISSION.
  * A frontier row was admitted once, possibly minutes ago. Admission and
@@ -23,10 +26,13 @@
  * because "it was already checked" is exactly the fast path §5 forbids.
  *
  * @see docs/decisions/ADR-0053-the-crawl-run.md
+ * @see docs/decisions/ADR-0068-the-page-fetch-returns-parsed-state.md
  */
 
 import { safeFetch, type SafeFetchDependencies } from '@growth-os/net';
 import type { CrawlFailureCategory, PageFetchOutcome } from '@growth-os/contracts';
+import { extractLinks, type ExtractedLink } from '../links/extract';
+import type { CrawlScope } from '../urls/scope';
 
 /**
  * What one fetch established. Every field is a fact about the response.
@@ -50,10 +56,53 @@ export interface PageObservation {
   readonly bytes: number;
 }
 
+/**
+ * One fetch: the response facts, and what the document said.
+ *
+ * ⚠️ THE TWO ARE SIBLINGS, NOT NESTED, AND THE SPLIT IS LOAD-BEARING.
+ * `PageObservation` is spread straight into `crawl_pages` by `markFetched`, so
+ * every field on it must be a column. `links` is not a column — it is rows in
+ * another table — so putting it inside the observation would break the spread
+ * that the observation's own doc comment promises.
+ *
+ * Mirrors `RobotsState` (facts + `rules`) and `SitemapState` (facts +
+ * `document`), which is what makes the three fetch modules readable together.
+ */
+export interface PageState {
+  readonly observation: PageObservation;
+  /**
+   * Links the document stated, or empty.
+   *
+   * ⚠️ EMPTY IS NOT "NO LINKS". It is also "no scope was supplied", "the
+   * response was not HTML", and "the fetch failed" — three cases a caller
+   * already distinguishes from `observation`. A separate `null` would add a
+   * fourth state that no caller has a different answer for.
+   */
+  readonly links: readonly ExtractedLink[];
+}
+
 export interface FetchPageOptions {
   /** Bytes accepted on the wire. Both tiers are stated where used (ADR-0049). */
   readonly maxCompressedBytes?: number;
+  /**
+   * The SITE's scope. Supply it to extract links; omit it and none are parsed.
+   *
+   * ⚠️ IT IS THE SITE'S, NOT THE PAGE'S. Whether a link is internal is a
+   * property of the site being crawled, not of whichever page contained it —
+   * `extractLinks` says the same thing at its own signature.
+   */
+  readonly scope?: CrawlScope;
 }
+
+/**
+ * Media types whose bodies are HTML documents.
+ *
+ * ⚠️ THE CONTENT TYPE GATES PARSING, NOT FETCHING. `fetchPage` deliberately
+ * records what a URL returned even when that is a PDF (see below); this list
+ * only decides whether it is worth running a scanner over. Scanning a PDF for
+ * `<a href>` would not be unsafe, it would be noise.
+ */
+const HTML_MEDIA_TYPES: ReadonlySet<string> = new Set(['text/html', 'application/xhtml+xml']);
 
 /** 2 MB on the wire, 8 MB decompressed — the same 4× ratio as the defaults. */
 const DEFAULT_TRANSFER_CEILING = 2 * 1024 * 1024;
@@ -144,7 +193,7 @@ export async function fetchPage(
   network: SafeFetchDependencies,
   url: string,
   options: FetchPageOptions = {},
-): Promise<PageObservation> {
+): Promise<PageState> {
   const ceiling = options.maxCompressedBytes ?? DEFAULT_TRANSFER_CEILING;
 
   const outcome = await safeFetch(network, url, {
@@ -157,36 +206,74 @@ export async function fetchPage(
 
   if (!outcome.ok) {
     return {
-      outcome: POLICY_REFUSALS.has(outcome.failure) ? 'blocked' : 'failed',
-      failureCategory: asCrawlFailure(outcome.failure),
-      httpStatus: null,
-      contentType: null,
-      contentLength: null,
-      fetchDurationMs: outcome.durationMs,
-      finalUrl: null,
-      redirectCount: outcome.redirects.length,
-      etag: null,
-      lastModified: null,
-      bytes: 0,
+      observation: {
+        outcome: POLICY_REFUSALS.has(outcome.failure) ? 'blocked' : 'failed',
+        failureCategory: asCrawlFailure(outcome.failure),
+        httpStatus: null,
+        contentType: null,
+        contentLength: null,
+        fetchDurationMs: outcome.durationMs,
+        finalUrl: null,
+        redirectCount: outcome.redirects.length,
+        etag: null,
+        lastModified: null,
+        bytes: 0,
+      },
+      links: [],
     };
   }
 
   const status = outcome.status;
   const moved = outcome.url !== outcome.requestedUrl;
+  const contentType = mediaType(outcome.headers['content-type']);
 
   return {
-    outcome: outcomeForStatus(status),
-    failureCategory: failureForStatus(status),
-    httpStatus: status,
-    contentType: mediaType(outcome.headers['content-type']),
-    contentLength: outcome.body.byteLength,
-    fetchDurationMs: outcome.durationMs,
-    finalUrl: moved ? outcome.url : null,
-    redirectCount: outcome.redirects.length,
-    etag: header(outcome.headers, 'etag'),
-    lastModified: header(outcome.headers, 'last-modified'),
-    bytes: outcome.body.byteLength,
+    observation: {
+      outcome: outcomeForStatus(status),
+      failureCategory: failureForStatus(status),
+      httpStatus: status,
+      contentType,
+      contentLength: outcome.body.byteLength,
+      fetchDurationMs: outcome.durationMs,
+      finalUrl: moved ? outcome.url : null,
+      redirectCount: outcome.redirects.length,
+      etag: header(outcome.headers, 'etag'),
+      lastModified: header(outcome.headers, 'last-modified'),
+      bytes: outcome.body.byteLength,
+    },
+    links: linksFrom(outcome.body, contentType, outcome.url, options.scope),
   };
+}
+
+/**
+ * Decode the body and extract, or return nothing and say why by returning
+ * nothing.
+ *
+ * ⚠️ `toString('utf8')` IS THE PACKAGE'S EXISTING ANSWER, NOT A NEW ONE.
+ * `robots/fetch.ts:147` and `sitemap/fetch.ts:136` both decode exactly this
+ * way. There is no charset sniffing anywhere in the crawler, so introducing it
+ * here would make this the only module that disagrees with the other two about
+ * what a byte means. The cost is stated rather than hidden: on a non-UTF-8
+ * page, bytes that do not decode become U+FFFD. `href`s are effectively always
+ * ASCII so targets are unaffected; anchor text on a Latin-1 page can come back
+ * with replacement characters. That is a fact-quality limitation to fix for all
+ * three modules at once, not one to fork here.
+ *
+ * ⚠️ THE BASE IS THE FINAL URL, NOT THE REQUESTED ONE. After a redirect the
+ * document's relative hrefs resolve against where it actually came from —
+ * `extractLinks`'s own signature says so, and using the requested URL would
+ * silently misresolve every relative link on every redirected page.
+ */
+function linksFrom(
+  body: Buffer,
+  contentType: string | null,
+  finalUrl: string,
+  scope: CrawlScope | undefined,
+): readonly ExtractedLink[] {
+  if (scope === undefined) return [];
+  if (contentType === null || !HTML_MEDIA_TYPES.has(contentType)) return [];
+
+  return extractLinks(body.toString('utf8'), finalUrl, scope);
 }
 
 function outcomeForStatus(status: number): PageFetchOutcome {

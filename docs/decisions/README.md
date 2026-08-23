@@ -180,3 +180,4 @@ ADRs, docs, code.
 | [0065](ADR-0065-guardrail-corpus-assembly.md)               | Corpus assembly is a service, and an incomplete corpus downgrades a pass              | Accepted |
 | [0066](ADR-0066-html-link-extraction.md)                    | Link extraction is a tolerant scanner, and it delegates scope rather than deciding it | Accepted |
 | [0067](ADR-0067-the-observation-id-is-the-retry-signal.md)  | The observation id is the retry signal, and the link table has no unique index        | Accepted |
+| [0068](ADR-0068-the-page-fetch-returns-parsed-state.md)     | The page fetch returns parsed state, like every other fetch module in the package     | Accepted |

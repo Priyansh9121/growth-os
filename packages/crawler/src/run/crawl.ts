@@ -208,7 +208,7 @@ export async function runCrawl(
     for (const url of claimed) {
       // ⚠️ THE FULL SSRF PIPELINE, AGAIN. This URL passed admission once; DNS
       // can resolve differently now. See ADR-0053.
-      const observation = await fetchPage(deps.network, url.normalisedUrl);
+      const { observation } = await fetchPage(deps.network, url.normalisedUrl);
       bytesDownloaded += observation.bytes;
 
       const succeeded = observation.outcome === 'fetched' || observation.outcome === 'unchanged';
