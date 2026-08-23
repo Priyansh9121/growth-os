@@ -17,12 +17,17 @@
  * on somebody else's server. `inTenant` is injected so each database step opens
  * and closes its own, and the caller decides what a transaction is.
  *
- * ⚠️ IT DOES NOT EXTRACT LINKS. A page fetch records facts about the response
- * and nothing about the document, so **the seed and sitemaps are the only
- * sources of frontier candidates**. A site with no sitemap yields a one-page
- * crawl. That is this session's stated limitation, not a defect it left behind.
+ * ⚠️ LINKS ARE THE THIRD SOURCE OF CANDIDATES, AFTER THE SEED AND SITEMAPS.
+ * `fetchPage` returns what the document stated (ADR-0068); this records it and
+ * offers the internal half to the frontier. A site with no sitemap is no longer
+ * a one-page crawl.
+ *
+ * It still adds no rule of its own: `linkCandidates` decides nothing a
+ * `classifyScope` verdict did not already say, and every admission decision
+ * remains `decideEnqueue`'s.
  *
  * @see docs/decisions/ADR-0053-the-crawl-run.md
+ * @see docs/decisions/ADR-0069-discovered-links-become-frontier-candidates.md
  */
 
 import type { SitemapOutcome } from '@growth-os/contracts';
@@ -39,12 +44,14 @@ import {
 import {
   claimNext,
   crawlProgress,
+  enqueueDiscovered,
   finishCrawl,
   markFailed,
   markFetched,
   seedFrontier,
   type EnqueueEnvironment,
 } from '../frontier/frontier';
+import { linkCandidates, recordLinks } from '../links/record';
 import { fetchPage } from '../pages/fetch';
 import { crawlScope } from '../urls/scope';
 
@@ -208,7 +215,9 @@ export async function runCrawl(
     for (const url of claimed) {
       // ⚠️ THE FULL SSRF PIPELINE, AGAIN. This URL passed admission once; DNS
       // can resolve differently now. See ADR-0053.
-      const { observation } = await fetchPage(deps.network, url.normalisedUrl);
+      const { observation, links } = await fetchPage(deps.network, url.normalisedUrl, {
+        scope: environment.scope,
+      });
       bytesDownloaded += observation.bytes;
 
       const succeeded = observation.outcome === 'fetched' || observation.outcome === 'unchanged';
@@ -216,19 +225,47 @@ export async function runCrawl(
       else pagesFailed += 1;
 
       await deps.inTenant(async (tx) => {
-        if (succeeded) {
-          await markFetched(tx, input.workspaceId, {
-            crawlId: input.crawlId,
-            siteId: input.siteId,
-            frontierId: url.id,
-            normalisedUrl: url.normalisedUrl,
-            depth: url.depth,
-            now: deps.now(),
-            observation: { ...observation, bytes: undefined },
-          });
-        } else {
+        if (!succeeded) {
           await markFailed(tx, url.id, deps.now());
+          return;
         }
+
+        const { crawlPageId } = await markFetched(tx, input.workspaceId, {
+          crawlId: input.crawlId,
+          siteId: input.siteId,
+          frontierId: url.id,
+          normalisedUrl: url.normalisedUrl,
+          depth: url.depth,
+          now: deps.now(),
+          observation: { ...observation, bytes: undefined },
+        });
+
+        // ⚠️ NULL MEANS THIS PAGE WAS ALREADY RECORDED IN THIS CRAWL — an
+        // at-least-once redelivery, not a failure. Its links were written by
+        // the attempt that created the observation, in this same transaction,
+        // so writing them again would duplicate every one of them:
+        // `crawl_links` has no unique index to refuse them (ADR-0067).
+        if (crawlPageId === null) return;
+
+        await recordLinks(tx, input.workspaceId, {
+          crawlId: input.crawlId,
+          sourcePageId: crawlPageId,
+          links,
+        });
+
+        // ⚠️ `url.id` IS THE FRONTIER ROW, WHICH IS WHAT THE COLUMN WANTS.
+        // `discovered_from` is a uuid self-reference to `crawl_frontier.id`,
+        // not a URL — the sitemap path documents having got that wrong once.
+        // Here there IS a row to point at, because the page that stated these
+        // links was itself claimed from the frontier.
+        await enqueueDiscovered(
+          tx,
+          input.workspaceId,
+          input.crawlId,
+          environment,
+          linkCandidates(links, url.depth + 1),
+          url.id,
+        );
       });
     }
   }
