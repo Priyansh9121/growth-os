@@ -101,12 +101,56 @@ Importing the extractor's constant into those would rebuild the tautology.
 
 Restored green at **62 tests** in `extract.test.ts` (60 before).
 
+## ⚠️ Slice 2 — the id was missing, and so was the idempotency it implies
+
+`crawl_links.source_page_id` references `crawl_pages.id`. `markFetched` — the
+only code that inserts a `crawl_pages` row — returned `{ sitePageId }`, which
+is `site_pages.id`: a different table, a different lifetime (ADR-0034). At the
+one place a link would be written, the id it must reference was not in scope.
+
+Fixing that alone would have shipped a worse bug than it fixed. `crawl_pages`
+absorbs the queue's at-least-once delivery with a unique index and
+`ON CONFLICT DO NOTHING`. **`crawl_links` has no unique index** — only two
+non-unique ones — and no natural unique key: a page linking to `/contact` from
+both the nav and the footer is two real edges with different anchor text.
+A retried page job would have written a second complete copy of every link on
+the page, silently, because nothing would error.
+
+Nor could it be cleaned up: `crawl_links` has RLS `ENABLE` + `FORCE` with only
+`SELECT` and `INSERT` policies (`0008:321-326`). Under the restricted role a
+delete-then-reinsert is not discouraged, it is impossible.
+
+**Both problems have one answer.** `ON CONFLICT DO NOTHING ... RETURNING id`
+returns the row when the insert happened and **nothing** when the conflict
+fired. Measured against `~/.growth-os/pgdata` before relying on it:
+
+```
+INSERT … ON CONFLICT (k) DO NOTHING RETURNING id;  →  1 row   (INSERT 0 1)
+INSERT … ON CONFLICT (k) DO NOTHING RETURNING id;  →  0 rows  (INSERT 0 0)
+```
+
+So `crawlPageId === null` means exactly "already recorded in this crawl", and
+gating the link write on it makes link persistence idempotent **without** a
+unique index, without a `DELETE` policy, and without a migration. The conflict
+clause is untouched; `RETURNING` adds a signal, it does not change what is
+written. Since `markFetched` uses the caller's transaction, observation and
+links commit together — there is no window where one exists without the other.
+
+This was not novel: `enqueueDiscovered` (`frontier.ts:194-205`) has always told
+a duplicate from an insert this same way. [ADR-0067](../decisions/ADR-0067-the-observation-id-is-the-retry-signal.md)
+records the decision and why `ON CONFLICT DO UPDATE` — the obvious fix — is the
+one alternative that actively destroys the signal.
+
+**Mutation-tested:**
+
+| Mutation                                          | Result           |
+| ------------------------------------------------- | ---------------- |
+| `crawlPageId` never null (ADR-0067 alternative A) | 1 test failed ✓  |
+| `RETURNING` dropped, so it is always null         | 2 tests failed ✓ |
+
+Restored green at **32 tests** in `frontier.integration.test.ts` (30 before).
+
 ## Remaining work
 
-The wiring itself. This slice is the precondition — a link cannot be persisted
-until the extractor stops producing rows the column refuses.
-
-1. `markFetched` must return the `crawl_pages` id: `crawl_links.source_page_id`
-   references it, and the function returns only `sitePageId`.
-2. `fetchPage` discards the body, so no HTML reaches a caller.
-3. Nothing writes `crawl_links` or enqueues a discovered link.
+1. `fetchPage` discards the body, so no HTML reaches a caller.
+2. Nothing writes `crawl_links` or enqueues a discovered link.
