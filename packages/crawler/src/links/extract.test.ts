@@ -279,6 +279,42 @@ describe('⚠️ hostile and malformed input', () => {
     expect(link?.anchorText?.length).toBe(MAX_ANCHOR_TEXT_LENGTH);
   });
 
+  /**
+   * ⚠️ THE ASSERTION ABOVE CANNOT CATCH THE BUG THIS ONE EXISTS FOR.
+   *
+   * It compares the extractor's output to `MAX_ANCHOR_TEXT_LENGTH` — the same
+   * constant that produced it — so it passes for ANY value of that constant,
+   * including one the database refuses. It did pass, at 512, against a column
+   * constrained to 300.
+   *
+   * `ANCHOR_TEXT_DATABASE_BOUND` is written here as a literal ON PURPOSE. Its
+   * authority is `0008_website_crawler.sql:261-263`:
+   *
+   *     ALTER TABLE "crawl_links"
+   *       ADD CONSTRAINT "crawl_links_anchor_text_is_bounded"
+   *       CHECK ("anchor_text" IS NULL OR length("anchor_text") <= 300);
+   *
+   * Importing the extractor's own constant here would rebuild the tautology.
+   * The row the database must refuse is proved in the link-persistence suite,
+   * where an insert actually happens; this is the cheap unit-tier gate that
+   * fails the moment the two numbers drift apart again.
+   */
+  const ANCHOR_TEXT_DATABASE_BOUND = 300;
+
+  it('⚠️ never produces anchor text the database would refuse', () => {
+    expect(MAX_ANCHOR_TEXT_LENGTH).toBeLessThanOrEqual(ANCHOR_TEXT_DATABASE_BOUND);
+
+    const [link] = extractLinks(`<a href="/x">${'y'.repeat(5_000)}</a>`, BASE, SCOPE);
+    expect(link?.anchorText?.length).toBeLessThanOrEqual(ANCHOR_TEXT_DATABASE_BOUND);
+  });
+
+  it('⚠️ an anchor at the old 512 cap is now truncated, not passed through', () => {
+    // The exact input that would have been accepted here and then rejected by
+    // the CHECK constraint, taking `markFetched` down with it.
+    const [link] = extractLinks(`<a href="/x">${'y'.repeat(512)}</a>`, BASE, SCOPE);
+    expect(link?.anchorText?.length).toBe(ANCHOR_TEXT_DATABASE_BOUND);
+  });
+
   it.each([
     ['empty document', ''],
     ['no markup at all', 'just some text'],

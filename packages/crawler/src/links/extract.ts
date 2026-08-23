@@ -44,8 +44,22 @@ import { classifyScope, type CrawlScope } from '../urls/scope';
  */
 export const MAX_LINKS_PER_PAGE = 5_000;
 
-/** Anchor text is a label, not content. Longer than this is a page in a link. */
-export const MAX_ANCHOR_TEXT_LENGTH = 512;
+/**
+ * Anchor text is a label, not content. Longer than this is a page in a link.
+ *
+ * ⚠️ THIS IS THE DATABASE'S NUMBER, NOT THIS MODULE'S CHOICE.
+ * `crawl_links_anchor_text_is_bounded` is `length(anchor_text) <= 300`
+ * (`0008_website_crawler.sql:261-263`), and AGENTS.md §5 makes the database the
+ * place limits live. This constant was 512 until the extractor acquired a
+ * caller: every anchor between 301 and 512 characters would have been produced
+ * happily here and then REFUSED by the CHECK, rolling back the whole page
+ * transaction — `markFetched` included — on the first long link on any site.
+ *
+ * The migration's own comment says the cap exists "in the database as well as
+ * in the extractor, so a bug in one cannot put a megabyte of somebody's page
+ * body into a column". The two were meant to agree. They did not.
+ */
+export const MAX_ANCHOR_TEXT_LENGTH = 300;
 
 export interface ExtractedLink {
   /** Normalised, absolute. Never a raw href. */

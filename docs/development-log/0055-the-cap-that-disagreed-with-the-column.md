@@ -1,0 +1,112 @@
+# 0055 — The cap that disagreed with the column
+
+**Date:** 2026-08-23 · **Stage:** 4
+
+## Objective
+
+Wire `extractLinks` into the crawl — persist links to `crawl_links`, enqueue
+in-scope internal links into the frontier — so a sitemap-less crawl discovers
+more than its seed. Dev log [0054](0054-the-second-classifyscope.md)'s
+"Remaining work" item 1.
+
+## Initial state
+
+Verified, not recalled: `dfc08f4`, tree clean, `## main...origin/main`, and
+`origin/main` at the same commit.
+
+- `npm test` bare → **1617 passed / 361 skipped (1978)**, 45 files / 19 skipped
+- `.env.local` sourced → **1978 passed (1978)**, 64 files
+- `npm run verify:all` → exit 0, 1978 passed, **32 boundaries**, gitignore clean
+- `npm run verify:e2e` → **77 passed**
+
+PostgreSQL by **`-D` data directory** ([0045](0045-a-preflight-that-lied.md)):
+`55432` → `~/.growth-os/pgdata` (PID 11424). `55433` → an unrelated project.
+
+## ⚠️ Two corrections to 0054, before building on it
+
+0054 is the record this session started from, and two of its statements do not
+survive re-measurement. Neither changes its conclusion — the SEO Agent is still
+Stage 8 with unmet dependencies, Stage 5 still has no implementation — but both
+are the kind of claim a later session would reason from.
+
+**"'Phase 0' appears only inside ADR prose describing a session brief"
+([0054](0054-the-second-classifyscope.md):28) is false.** `grep -rniE
+"phase[ _-]?[01]\b"` finds it in shipped source and in a migration:
+`packages/database/src/schema/agents.ts:22` and `:204`,
+`packages/database/migrations/0014_agent_platform.sql:137`,
+`packages/guardrails/src/pipeline.ts:11`, `packages/guardrails/src/self-duplication.ts`.
+The _"Phase 1"_ half holds: it appears nowhere but in the two sentences of 0054
+that deny it.
+
+**"Stages 0–22" is off by one and omits a fraction.** The roadmap runs Stage 0
+through `docs/product/product-roadmap.md:553` "## Stage 23 — Production scale &
+hardening ⬜", and contains a non-integer `## Stage 2.5`.
+
+**And one correction to [ADR-0066](../decisions/ADR-0066-html-link-extraction.md).**
+`links/extract.ts:15` reads "⚠️ NO RAW HTML LEAVES THIS MODULE (ADR-0034)".
+[ADR-0034](../decisions/ADR-0034-crawl-storage-model.md) is titled _"Page
+identity is separate from page facts"_ and contains no occurrence of "HTML",
+"raw", "escape" or "body" — the property is real and worth keeping, but that
+ADR is not its authority. Recorded, not yet fixed.
+
+## ⚠️ The finding: the extractor's cap was above the column's
+
+`extractLinks` capped anchor text at **512** characters
+(`links/extract.ts:48`). `crawl_links` refuses anything over **300**:
+
+```sql
+-- 0008_website_crawler.sql:258-263
+-- ⚠️ ANCHOR TEXT IS ARBITRARY PUBLIC CONTENT FROM A THIRD PARTY'S WEBSITE.
+-- Capped in the database as well as in the extractor, so a bug in one cannot
+-- put a megabyte of somebody's page body into a column.
+ALTER TABLE "crawl_links"
+  ADD CONSTRAINT "crawl_links_anchor_text_is_bounded"
+  CHECK ("anchor_text" IS NULL OR length("anchor_text") <= 300);
+```
+
+The migration's own comment says the two caps exist so that _"a bug in one
+cannot"_ reach the column. They were meant to agree, and they did not.
+
+This was harmless for exactly as long as nothing inserted a link. The first
+anchor between 301 and 512 characters — one long call-to-action on one page of
+one customer's site — would have been produced happily by the extractor and
+then refused by the CHECK, rolling back the entire page transaction,
+`markFetched` included. The page would have been re-claimed, re-fetched, and
+failed the same way until its retry ceiling.
+
+**AGENTS.md §5 decides which number moves.** _"Limits live in the database."_
+The extractor comes down to 300; the constraint is not relaxed to 512.
+
+### Why the existing test could not catch it
+
+`extract.test.ts` already had a cap test, and it passed at 512:
+
+```ts
+const [link] = extractLinks(`<a href="/x">${'y'.repeat(MAX_ANCHOR_TEXT_LENGTH * 4)}</a>`, …);
+expect(link?.anchorText?.length).toBe(MAX_ANCHOR_TEXT_LENGTH);
+```
+
+It compares the extractor's output against **the same constant that produced
+it**. It is a tautology: it passes for any value, including one the database
+refuses. It is left in place — capping at all is still worth asserting — and
+two tests were added beside it that compare against the database's bound
+written as a literal, with the migration line quoted as its authority.
+Importing the extractor's constant into those would rebuild the tautology.
+
+**Mutation-tested.** Restoring `512`:
+
+| Mutation                       | Result                                                                            |
+| ------------------------------ | --------------------------------------------------------------------------------- |
+| `MAX_ANCHOR_TEXT_LENGTH` → 512 | 2 tests failed ✓ — and the pre-existing cap test still PASSED, which is the point |
+
+Restored green at **62 tests** in `extract.test.ts` (60 before).
+
+## Remaining work
+
+The wiring itself. This slice is the precondition — a link cannot be persisted
+until the extractor stops producing rows the column refuses.
+
+1. `markFetched` must return the `crawl_pages` id: `crawl_links.source_page_id`
+   references it, and the function returns only `sitePageId`.
+2. `fetchPage` discards the body, so no HTML reaches a caller.
+3. Nothing writes `crawl_links` or enqueues a discovered link.
