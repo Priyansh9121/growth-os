@@ -196,8 +196,103 @@ content-type too.
 
 Restored green at **29 tests** in `fetch.test.ts` (20 before).
 
+## Slice 4 — the wiring, and a mutation that survived
+
+`runCrawl` now passes the site scope to `fetchPage`, records every returned
+link to `crawl_links`, and offers the internal ones to the frontier. A
+sitemap-less crawl discovers pages for the first time.
+
+`crawl_links` has a writer for the first time since migration 0008 created it,
+and `crawl_frontier.discovered_from` has its first real value — the page that
+stated a link was itself claimed from the frontier, so there is a row to point
+at. (The sitemap path leaves it null, and 0054 records a session that tried to
+put a URL in that uuid column.)
+
+Three decisions, in [ADR-0069](../decisions/ADR-0069-discovered-links-become-frontier-candidates.md):
+
+- **Every link recorded, only internal links offered.** Not a second scope rule
+  — the verdict is `link.scope` from the one `classifyScope`. `decideEnqueue`
+  would refuse an external link anyway, and that is the argument: a refusal is
+  _recorded_, and a recorded refusal costs a frontier row. A site's outbound
+  links would spend the row ceiling the crawl needs for the customer's own
+  pages, to record a fact `crawl_links` now holds better and durably.
+- **`nofollow` is recorded and not filtered.** It tells a search engine not to
+  pass weight; it does not tell a site's own auditor not to look. Making it an
+  admission rule belongs in `decideEnqueue` with a skip reason an operator can
+  see, not in a link mapper.
+- **Links are written only when `crawlPageId` is non-null** — the ADR-0067
+  signal, gating against a redelivered page duplicating every link.
+
+### ⚠️ The mutation that survived, and what it exposed
+
+Five mutations were run. Four failed tests immediately. **Deleting the
+`crawlPageId === null` gate broke nothing** — the third decision above, and no
+test reached it. Every fixture in `crawl.integration.test.ts` fetches each page
+exactly once, so the redelivery branch was unreachable by construction.
+
+A test that cannot fail is not coverage, and the gate is precisely the part
+that is silent when wrong: a duplicated link graph raises no error, because
+`crawl_links` has no unique index to complain.
+
+Closing it needed no refactor. At-least-once delivery's real shape is "the
+transaction committed, the worker died before acknowledging, the row is
+delivered again" — reproduced by resetting the seed's frontier row to `queued`,
+reopening the crawl, and running it again. That exercises the production path
+rather than a rewritten version of it.
+
+| Mutation                                      | Before       | After      |
+| --------------------------------------------- | ------------ | ---------- |
+| retry gate deleted                            | **survived** | 1 failed ✓ |
+| retry gate inverted (skip on the FIRST write) | —            | 6 failed ✓ |
+| internal-only filter removed                  | 4 failed ✓   | 4 failed ✓ |
+| depth not incremented per link hop            | 2 failed ✓   | 2 failed ✓ |
+| `nofollow` filtered out of candidates         | 2 failed ✓   | 2 failed ✓ |
+
+### The constraint test slice 1 could not write
+
+`recordLinks` is the first code that inserts a link, so it is the first place
+§5's _"the test for a constraint is a row that must be refused"_ can be
+honoured for the anchor cap. A 301-character anchor is refused with SQLSTATE
+`23514` citing `crawl_links_anchor_text_is_bounded`; 300 is accepted. The
+extractor coming down to 300 is now provably not the only thing between a long
+anchor and a rolled-back page transaction.
+
+### A test tier mistake, caught before commit
+
+`linkCandidates` is pure, and its tests were first written inside
+`record.integration.test.ts`. The unit project **excludes**
+`**/*.integration.test.ts` (`vitest.config.ts:44`), so they would have run only
+for someone with a database — a pure function's tests silently absent from the
+cheap gate. Split into `record.test.ts`.
+
+## Verification
+
+- `npm run verify:all` — **2013 passed (2013)**, 66 files, exit 0.
+  **32 boundaries** enforced, gitignore clean.
+- `npm run verify:e2e` — **77 passed**. Not skipped: no `apps/web`, token or
+  route change in this work, but the gate fails rather than skips, so it ran.
+- Migrations applied from zero on a throwaway `growth_os_scratch`, which then
+  confirmed `crawl_links` is `relrowsecurity = t` **and**
+  `relforcerowsecurity = t` and that `crawl_links_anchor_text_is_bounded`
+  exists on a fresh schema. Database destroyed.
+- No migration in any of the four slices.
+
 ## Remaining work
 
-Nothing writes `crawl_links` or enqueues a discovered link. `runCrawl`
-destructures `{ observation }` and does not yet pass a scope, so a sitemap-less
-crawl still returns one page.
+1. **`<a href>` only.** No `<link rel>`, `<area>`, canonical or `<iframe src>`
+   — unchanged from 0054, and ADR-0069 explicitly does not decide it.
+2. **No JavaScript rendering.** A client-side-rendered navigation still yields
+   nothing.
+3. **No charset sniffing**, in this module or the two beside it. A Latin-1
+   page's anchor text can carry U+FFFD. Targets are unaffected because `href`s
+   are ASCII. [ADR-0068](../decisions/ADR-0068-the-page-fetch-returns-parsed-state.md)
+   states it; fixing it is one change across all three fetch modules.
+4. **Stage 5 still does not exist.** These are the facts it will interpret; the
+   findings layer is not started, and the SEO Agent (Stage 8) still has unmet
+   dependencies.
+5. Recorded, not fixed: `PROJECT-STATUS.md` says the crawler has no caller
+   (`apps/worker/src/jobs/run-crawl.ts:9` says otherwise);
+   `ai-agent-architecture.md:3` and `:162` call the agent runtime "Stage 7"
+   while the roadmap makes Stage 7 keywords and Stage 8 the agent; and
+   `links/extract.ts:15` still cites ADR-0034 for a rule ADR-0034 does not
+   contain.
