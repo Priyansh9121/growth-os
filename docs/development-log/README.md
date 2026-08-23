@@ -84,3 +84,4 @@ process. Where a number appears, the command that produced it appears too.
 | [0052](0052-the-threshold-that-moved-with-length.md)     | The threshold that moved with length                                   | 2026-08-23 |
 | [0053](0053-the-corpus-that-could-be-incomplete.md)      | The corpus that could be incomplete, and a mutation that survived      | 2026-08-23 |
 | [0054](0054-the-second-classifyscope.md)                 | The second classifyScope, and two briefs that dissolved on measurement | 2026-08-23 |
+| [0055](0055-the-cap-that-disagreed-with-the-column.md)   | The cap that disagreed with the column                                 | 2026-08-23 |
