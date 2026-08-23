@@ -179,3 +179,4 @@ ADRs, docs, code.
 | [0064](ADR-0064-self-duplication-guardrail.md)              | The self-duplication guardrail is pure, measured, and may say "I cannot tell"         | Accepted |
 | [0065](ADR-0065-guardrail-corpus-assembly.md)               | Corpus assembly is a service, and an incomplete corpus downgrades a pass              | Accepted |
 | [0066](ADR-0066-html-link-extraction.md)                    | Link extraction is a tolerant scanner, and it delegates scope rather than deciding it | Accepted |
+| [0067](ADR-0067-the-observation-id-is-the-retry-signal.md)  | The observation id is the retry signal, and the link table has no unique index        | Accepted |

@@ -478,6 +478,103 @@ describeIntegration('the crawl frontier', () => {
       expect(await harness.owner.select().from(crawlPages)).toHaveLength(1);
       expect(await harness.owner.select().from(sitePages)).toHaveLength(1);
     });
+
+    /**
+     * ⚠️ THE PROPERTY ANYTHING HANGING OFF THE OBSERVATION DEPENDS ON.
+     *
+     * `crawl_links.source_page_id` references `crawl_pages.id`, and
+     * `crawl_links` has NO unique index — it cannot absorb a repeat insert the
+     * way `crawl_pages` does. So a caller must be able to tell a first write
+     * from a retry, and `crawlPageId` is that signal.
+     *
+     * @see docs/decisions/ADR-0067-the-observation-id-is-the-retry-signal.md
+     */
+    it('⚠️ returns the observation id first, and null on the retry', async () => {
+      await inTenant((tx) => seedFrontier(tx, workspaceId, crawlId, environment(), ORIGIN));
+      const [claimed] = await inTenant((tx) => claimNext(tx, crawlId, 1, new Date()));
+
+      const write = () =>
+        inTenant((tx) =>
+          markFetched(tx, workspaceId, {
+            crawlId,
+            siteId,
+            frontierId: claimed!.id,
+            normalisedUrl: claimed!.normalisedUrl,
+            depth: 0,
+            now: new Date(),
+            observation: { outcome: 'fetched', httpStatus: 200 },
+          }),
+        );
+
+      const first = await write();
+      const retry = await write();
+
+      // The first call created the observation and says which one.
+      expect(first.crawlPageId).not.toBeNull();
+      const [row] = await harness.owner.select().from(crawlPages);
+      expect(first.crawlPageId).toBe(row?.id);
+
+      // ⚠️ The retry wrote nothing and SAYS SO. This is the assertion that
+      // stops a second copy of every link on the page.
+      expect(retry.crawlPageId).toBeNull();
+
+      // The durable identity is returned on BOTH calls — it is upserted, not
+      // inserted, so it is never the retry signal.
+      expect(first.sitePageId).toBe(retry.sitePageId);
+      expect(await harness.owner.select().from(crawlPages)).toHaveLength(1);
+    });
+
+    it('a second crawl of the same page gets a fresh observation id, not null', async () => {
+      // A retry within one crawl is a no-op; a NEW crawl is a new observation.
+      // Without this, "gate link writes on crawlPageId" would silently stop
+      // recording links from the second crawl onward.
+      await inTenant((tx) => seedFrontier(tx, workspaceId, crawlId, environment(), ORIGIN));
+      const [first] = await inTenant((tx) => claimNext(tx, crawlId, 1, new Date()));
+      const one = await inTenant((tx) =>
+        markFetched(tx, workspaceId, {
+          crawlId,
+          siteId,
+          frontierId: first!.id,
+          normalisedUrl: first!.normalisedUrl,
+          depth: 0,
+          now: new Date(),
+          observation: { outcome: 'fetched', httpStatus: 200 },
+        }),
+      );
+
+      const [second] = await harness.owner
+        .insert(crawls)
+        .values({
+          workspaceId,
+          siteId,
+          origin: ORIGIN,
+          pageLimit: 50,
+          maxDepth: 5,
+          trigger: 'recrawl',
+          status: 'running',
+          startedAt: new Date(),
+        })
+        .returning();
+
+      await inTenant((tx) => seedFrontier(tx, workspaceId, second!.id, environment(), ORIGIN));
+      const [again] = await inTenant((tx) => claimNext(tx, second!.id, 1, new Date()));
+      const two = await inTenant((tx) =>
+        markFetched(tx, workspaceId, {
+          crawlId: second!.id,
+          siteId,
+          frontierId: again!.id,
+          normalisedUrl: again!.normalisedUrl,
+          depth: 0,
+          now: new Date(),
+          observation: { outcome: 'fetched', httpStatus: 200 },
+        }),
+      );
+
+      expect(two.crawlPageId).not.toBeNull();
+      expect(two.crawlPageId).not.toBe(one.crawlPageId);
+      // One durable identity, two observations (ADR-0034).
+      expect(two.sitePageId).toBe(one.sitePageId);
+    });
   });
 
   // -------------------------------------------------------------------------

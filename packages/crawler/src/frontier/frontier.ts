@@ -289,6 +289,30 @@ export async function claimNext(
   return claimed;
 }
 
+export interface MarkFetchedResult {
+  /** The DURABLE identity, `site_pages.id`. Survives every crawl (ADR-0034). */
+  readonly sitePageId: string;
+  /**
+   * This crawl's observation, `crawl_pages.id` — or `null` when this page had
+   * already been recorded in this crawl and the insert was a no-op.
+   *
+   * ⚠️ `null` IS "ALREADY DONE", NOT "FAILED". The queue is at-least-once, so
+   * a page job runs twice more often than anyone expects, and the second run
+   * takes this branch having written nothing.
+   *
+   * ⚠️ ANYTHING HANGING OFF THE OBSERVATION MUST BE WRITTEN ONLY WHEN THIS IS
+   * NON-NULL. `crawl_links.source_page_id` references `crawl_pages.id` and the
+   * link table has NO unique index — it cannot make a repeat insert a no-op the
+   * way `crawl_pages` can. Gating on this id is what keeps a retried page job
+   * from writing a second copy of every link on the page. Because the caller's
+   * transaction is this transaction, "the observation exists" and "its links
+   * exist" commit together or not at all.
+   *
+   * @see docs/decisions/ADR-0067-the-observation-id-is-the-retry-signal.md
+   */
+  readonly crawlPageId: string | null;
+}
+
 /**
  * Attach a fetched URL to its DURABLE page identity, and mark it done.
  *
@@ -315,7 +339,7 @@ export async function markFetched(
     /** Facts. Never a severity, never a recommendation (§5). */
     readonly observation: Record<string, unknown>;
   },
-): Promise<{ readonly sitePageId: string }> {
+): Promise<MarkFetchedResult> {
   // ⚠️ UPSERT, not insert-if-absent. `site_pages` is unique on
   // `(site_id, normalised_url)` for ALL TIME, so the second crawl of a page
   // finds the row the first crawl made and only moves `last_seen_at`.
@@ -339,7 +363,18 @@ export async function markFetched(
 
   if (!page) throw new Error('site_pages upsert returned no row');
 
-  await tx
+  // ⚠️ `RETURNING` ON A `DO NOTHING` INSERT IS THE RETRY SIGNAL, NOT A
+  // CONVENIENCE. Postgres returns the inserted row when the insert happened and
+  // NO ROW AT ALL when the conflict target fired — measured, not assumed, and
+  // already the behaviour `enqueueDiscovered` depends on above (the `written`
+  // array is how it tells a duplicate from an insert).
+  //
+  // So `crawlPageId === null` means precisely "this page was already recorded
+  // in this crawl", which is the one thing a caller needs to know before
+  // writing anything that hangs off this observation. Nothing about the
+  // conflict behaviour changes: the clause is identical, and the retry is still
+  // a no-op rather than a second row.
+  const [observation] = await tx
     .insert(crawlPages)
     .values({
       workspaceId,
@@ -353,14 +388,15 @@ export async function markFetched(
     } as typeof crawlPages.$inferInsert)
     // At-least-once delivery means a page job will sometimes run twice. The
     // unique index makes the retry idempotent rather than doubling every count.
-    .onConflictDoNothing({ target: [crawlPages.crawlId, crawlPages.normalisedUrl] });
+    .onConflictDoNothing({ target: [crawlPages.crawlId, crawlPages.normalisedUrl] })
+    .returning({ id: crawlPages.id });
 
   await tx
     .update(crawlFrontier)
     .set({ state: 'fetched', fetchedAt: input.now })
     .where(eq(crawlFrontier.id, input.frontierId));
 
-  return { sitePageId: page.id };
+  return { sitePageId: page.id, crawlPageId: observation?.id ?? null };
 }
 
 /** A claimed URL that failed past its retry ceiling. Still discovered, not fetched. */
