@@ -219,6 +219,24 @@ const PROBES = [
     file: 'packages/crawler/src/__boundary_probe.ts',
     source: "export const probe = () => import('node:http');\n",
   },
+  // The audit layer. "It cannot fetch a page" is the claim packages/seo exists
+  // to make provable rather than commented (ADR-0071); these are the proof.
+  {
+    name: 'seo → node:http (an audit must not be able to fetch anything)',
+    file: 'packages/seo/src/__boundary_probe.ts',
+    source: "import { request } from 'node:http';\nexport const probe = request;\n",
+  },
+  {
+    name: 'seo → net (the legitimate socket is still a socket)',
+    file: 'packages/seo/src/__boundary_probe.ts',
+    source: "import { safeFetch } from '@growth-os/net';\nexport const probe = safeFetch;\n",
+  },
+  {
+    name: "seo → crawler (the audit reads the crawler's tables, not its code)",
+    file: 'packages/seo/src/__boundary_probe.ts',
+    source:
+      "import { recordLinks } from '@growth-os/crawler';\nexport const probe = recordLinks;\n",
+  },
 ];
 
 let failures = 0;

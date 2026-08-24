@@ -228,6 +228,55 @@ export default tseslint.config(
     },
   },
 
+  /**
+   * The audit layer, and the reason it is a package rather than a directory.
+   *
+   * ⚠️ IT MUST NOT BE ABLE TO FETCH ANYTHING. An audit interprets facts that
+   * are ALREADY recorded. A rule that could reach the network could decide to
+   * go and look at the page itself, and that path would be a second crawler —
+   * one with no robots evaluation, no frontier budget and no politeness. The
+   * global socket rule below already denies `node:http` here; what this block
+   * adds is `@growth-os/net`, which is the legitimate way to open a socket and
+   * therefore the one this package must also not have.
+   *
+   * ⚠️ AND NOT `@growth-os/crawler` EITHER, which is the less obvious half.
+   * The audit reads the crawler's TABLES, not its code. Depending on the
+   * package would let a rule call `fetchPage` transitively, and would couple
+   * the interpretation of facts to the implementation that gathered them — so
+   * that changing how a page is fetched could change what an audit concludes.
+   *
+   * The allowance is expressed as a NEGATION rather than a list of forbidden
+   * packages, so a package added later is denied by default instead of being
+   * silently permitted until somebody remembers to extend a list
+   * (ADR-0071).
+   */
+  {
+    files: ['packages/seo/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            { name: 'next', message: 'Domain packages must not depend on Next.js.' },
+            { name: 'react', message: 'Domain packages must not depend on React.' },
+          ],
+          patterns: [
+            {
+              group: ['@growth-os/*', '!@growth-os/contracts', '!@growth-os/database'],
+              message:
+                "packages/seo may depend on contracts and database only. It reads the crawler's tables, not its code, and it must not be able to open a socket (ADR-0071).",
+            },
+            { group: ['next/*'], message: 'Domain packages must not depend on Next.js.' },
+            {
+              group: ['../../*', '**/apps/**'],
+              message: 'Imports must not escape the package directory.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // database → contracts only.
   {
     files: ['packages/database/**/*.{ts,tsx}'],
