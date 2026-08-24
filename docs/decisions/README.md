@@ -182,3 +182,4 @@ ADRs, docs, code.
 | [0067](ADR-0067-the-observation-id-is-the-retry-signal.md)      | The observation id is the retry signal, and the link table has no unique index                 | Accepted |
 | [0068](ADR-0068-the-page-fetch-returns-parsed-state.md)         | The page fetch returns parsed state, like every other fetch module in the package              | Accepted |
 | [0069](ADR-0069-discovered-links-become-frontier-candidates.md) | Every link is recorded, only internal links are offered, and nofollow is not an admission rule | Accepted |
+| [0070](ADR-0070-findings-belong-to-a-crawl.md)                  | A finding belongs to a crawl, points at the durable page, and is bounded by an index           | Accepted |
