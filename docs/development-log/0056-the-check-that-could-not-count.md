@@ -141,3 +141,127 @@ above prove by refusal.
   UPDATE and no DELETE; `seo_findings_evidence_is_a_bounded_object` present;
   all three foreign keys `ON DELETE CASCADE`; the unique index present; and the
   `seo_finding_rule` enum holding exactly `orphan_page`. Database destroyed.
+
+## Slice (b) — the package, and why it is a package
+
+`packages/seo` (`@growth-os/seo`) is new, with exactly two internal
+dependencies: `@growth-os/contracts` and `@growth-os/database`.
+
+**The whole argument is that it makes a claim provable.** Inside
+`packages/crawler`, "the audit layer cannot fetch a page" would be a comment —
+the crawler depends on `@growth-os/net` because it must, and any module inside
+it inherits that. As a separate package the same sentence is a lint failure and
+a boundary probe. `verify:boundaries` now writes `node:http`, `@growth-os/net`
+and `@growth-os/crawler` imports into `packages/seo` and asserts ESLint rejects
+each: **35 boundaries**, up from 32.
+
+**`audit` was rejected as a name.** It is already taken by the append-only
+compliance trail — `audit.ts`, `audit_events`, ADR-0013 — and a
+`packages/audit` holding SEO findings would collide with that in every search
+and every conversation. [ADR-0071](../decisions/ADR-0071-the-audit-layer-is-its-own-package.md).
+
+**No `@growth-os/crawler` dependency either**, which is the less obvious half.
+The audit reads the crawler's _tables_, not its code. Depending on the package
+would restore the network reachability the split just removed, and would couple
+what an audit concludes to the implementation that gathered the facts.
+
+The ESLint allowance is written as a **negation** —
+`['@growth-os/*', '!@growth-os/contracts', '!@growth-os/database']` — so a
+package added later is denied by default rather than silently permitted until
+somebody extends a forbidden-list. Both halves were probed rather than assumed:
+the denial fails lint, and `contracts` + `database` still pass it.
+
+## ⚠️ The duplication I went looking for, and did not write
+
+Dev log [0054](0054-the-second-classifyscope.md) records a session that wrote a
+second `classifyScope` before finding the first, and this rule needs exactly
+that kind of logic — it has to decide whether a link points at the page in hand,
+and whether it is internal.
+
+It needs none of it. `crawl_links.target_url` was already normalised by the one
+`normaliseUrl` before it was recorded (`links/extract.ts:330`), and
+`crawl_links.scope` is already the verdict of the one `classifyScope`
+(`extract.ts:160`). So the join is a plain text equality and the scope test is
+`eq(crawlLinks.scope, 'internal')` — a column read, not a decision.
+
+**`packages/seo` contains no URL code and defines no scope rule**, and that was
+checked rather than intended. It is also why ADR-0071 says explicitly that not
+depending on `@growth-os/crawler` is not a licence to re-derive it: the two
+temptations point in opposite directions and both end at a second normaliser.
+
+## The three predicates that decide "orphan"
+
+"A page nothing links to" sounds unambiguous. Three predicates decide what it
+means, and two of them contradicted the brief.
+[ADR-0072](../decisions/ADR-0072-the-orphan-page-rule.md).
+
+- **`outcome IN ('fetched','unchanged')`** — the retrieved population. Counting
+  every `crawl_pages` row would inflate the denominator _and_ emit an
+  `orphan_page` finding for every broken URL the site links to, which is the
+  most annoying false positive available: reporting that a page nobody can
+  reach is not linked to.
+- **`source_page_id <> crawl_pages.id`** — a self-link is not an inbound link.
+  Not in the brief. Almost every page links to itself (a logo, a breadcrumb, a
+  nav item), so without this the rule rescues precisely the orphans that have a
+  site-wide header.
+- **`scope = 'internal'`** — read, never recomputed. An orphan is a page _the
+  site_ does not link to.
+
+## Chunking: measured, not assumed
+
+The brief suggested following `recordLinks`' chunked writes "if row count could
+be large". Measured rather than copied: each finding binds **5** parameters
+against PostgreSQL's **65535** ceiling, and `crawls_budget_is_bounded` caps
+`page_limit` at **10,000** — so the worst case, every retrieved page orphaned,
+is **50,000** parameters. Under the ceiling today, and over it the moment the
+row grows a sixth and seventh column. Chunked at 500, for the same reason
+`recordLinks` gives: to make the coupling not exist rather than to document it.
+
+## ⚠️ Mutation testing — and one that survived
+
+| Mutation                                | Result                    |
+| --------------------------------------- | ------------------------- |
+| self-link predicate removed             | 1 failed ✓                |
+| outcome filter removed                  | 1 failed ✓                |
+| scope filter removed                    | 1 failed ✓                |
+| denominator becomes the orphan count    | 4 failed ✓                |
+| `ON CONFLICT DO NOTHING` removed        | 1 failed ✓                |
+| `isNotNull(site_page_id)` guard removed | **survived** → 1 failed ✓ |
+
+The guard drops an observation the rule cannot name. Every fixture went through
+`markFetched`'s shape — and `markFetched` is the only production writer of
+`crawl_pages` and always sets `site_page_id` — so the branch was unreachable by
+construction, exactly as 0055's retry gate was.
+
+It is still worth having: the column **is** nullable while
+`seo_findings.site_page_id` is NOT NULL (ADR-0070), so the row is representable,
+and without the guard one malformed observation kills the whole audit with a
+23502 instead of being skipped. Closed by inserting such a row directly and
+asserting it is dropped from the findings _and_ from the population. Re-running
+the mutation then failed the new test.
+
+## Verification — slice (b)
+
+- `npm run verify:all` — exit 0. **2050 passed (2050)**, 69 files.
+  **35 boundaries** enforced (32 before), gitignore clean.
+- `npm run verify:e2e` — **77 passed**. Not skipped: this slice touches no `apps/web`, `packages/ui`, token or route file — confirmed by `git status --short`, which lists only `docs/`, `eslint.config.mjs`, `scripts/verify-boundaries.mjs`, `package-lock.json` and `packages/seo/` — but the gate fails rather than skips, so it ran.
+- Migrations re-applied **from zero** on a throwaway database at the final tree
+  and destroyed; no migration in this slice.
+
+## Remaining work
+
+1. **Nothing calls `recordOrphanPages`.** It takes a transaction and a crawl id
+   and has no production caller. When an audit runs — at the end of a crawl, on
+   demand, or on a schedule — is a separate decision that ADR-0071 explicitly
+   does not make.
+2. **One rule.** `SEO_FINDING_RULES` has a single member because a member with
+   no rule behind it is a value the enum accepts and nothing explains.
+3. **No severity, prioritisation or UI**, all out of scope by the brief and by
+   ADR-0070's decision D.
+4. Recorded, not fixed, and still true from
+   [0055](0055-the-cap-that-disagreed-with-the-column.md): `PROJECT-STATUS.md`
+   says the crawler has no caller; `ai-agent-architecture.md:3` and `:162` call
+   the agent runtime "Stage 7" while the roadmap makes Stage 8 the agent;
+   `links/extract.ts:15` cites ADR-0034 for a rule ADR-0034 does not contain.
+   Newly noticed: the roadmap's **Stage 5 lists "Dependencies: Stage 3"**, which
+   is stale — this stage reads `crawl_pages` and `crawl_links`, both Stage 4.

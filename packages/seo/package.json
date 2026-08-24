@@ -1,0 +1,17 @@
+{
+  "name": "@growth-os/seo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The audit layer. Reads the facts a crawl recorded and interprets them into findings. It cannot open a socket and does not depend on the crawler: it reads the crawler's tables, not its code.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@growth-os/contracts": "*",
+    "@growth-os/database": "*"
+  }
+}
